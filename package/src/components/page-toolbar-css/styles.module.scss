@@ -134,6 +134,17 @@ $green: #34c759;
   }
 }
 
+@keyframes tooltipOut {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(0.909);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(2px) scale(0.891);
+  }
+}
+
 @keyframes hoverHighlightIn {
   from {
     opacity: 0;
@@ -1006,6 +1017,10 @@ $green: #34c759;
 
   &.enter {
     animation: tooltipIn 0.1s ease-out forwards;
+  }
+
+  &.exit {
+    animation: tooltipOut 0.1s ease-out forwards;
   }
 }
 
