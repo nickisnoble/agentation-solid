@@ -721,7 +721,6 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     toolbarX: number;
     toolbarY: number;
   } | null>(null);
-  const [dragRotation, setDragRotation] = useState(0);
   const justFinishedToolbarDragRef = useRef(false);
 
   // For animations - track which markers have animated in and which are exiting
@@ -2757,10 +2756,6 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       const rect = toolbarParent.getBoundingClientRect();
       const currentX = toolbarPosition?.x ?? rect.left;
       const currentY = toolbarPosition?.y ?? rect.top;
-
-      // Generate random rotation between -5 and 5 degrees
-      const randomRotation = (Math.random() - 0.5) * 10; // -5 to +5
-      setDragRotation(randomRotation);
 
       setDragStartPos({
         x: e.clientX,
