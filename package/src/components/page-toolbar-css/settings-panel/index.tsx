@@ -329,7 +329,7 @@ export function SettingsPanel({
               <div className={styles.autoSendContainer}>
                 <label
                   htmlFor="agentation-auto-send"
-                  className={`${styles.autoSendLabel} ${settings.webhooksEnabled ? styles.active : ""}`}
+                  className={`${styles.autoSendLabel} ${settings.webhooksEnabled ? styles.active : ""} ${!settings.webhookUrl ? styles.disabled : ""}`}
                 >
                   Auto-Send
                 </label>

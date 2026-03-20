@@ -615,8 +615,10 @@
   padding-inline-end: 8px;
   font-size: 11px;
   font-weight: 400;
-  color: rgb(255 255 255 / 0.2);
-  transition: color 0.15s ease;
+  color: rgb(255 255 255 / 0.4);
+  transition:
+    color 0.15s,
+    opacity 0.15s;
   cursor: pointer;
 
   &.active {
@@ -630,6 +632,11 @@
     &.active {
       color: var(--agentation-color-blue);
     }
+  }
+
+  &.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 }
 
