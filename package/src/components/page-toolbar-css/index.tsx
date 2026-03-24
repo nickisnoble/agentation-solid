@@ -1,7 +1,6 @@
-"use client";
-
-import { useState, useCallback, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { createSignal, createEffect, on, onMount, onCleanup, batch } from "solid-js";
+import { Portal, Show, For } from "solid-js/web";
+import type { JSX } from "solid-js";
 
 import {
   AnnotationPopupCSS,
@@ -48,7 +47,7 @@ import {
   updateAnnotation as updateAnnotationOnServer,
   deleteAnnotation as deleteAnnotationFromServer,
 } from "../../utils/sync";
-import { getReactComponentName } from "../../utils/react-detection";
+import { getSolidComponentName } from "../../utils/solid-detection";
 import {
   getSourceLocation,
   findNearestComponentSource,
@@ -68,37 +67,37 @@ import { AnnotationMarker, ExitingMarker, PendingMarker } from "./annotation-mar
 import { SettingsPanel } from "./settings-panel";
 
 /**
- * Composes element identification with React component detection.
+ * Composes element identification with component detection.
  * This is the boundary where we combine framework-agnostic element ID
- * with React-specific component name detection.
+ * with Solid-specific component name detection.
  */
-function identifyElementWithReact(
+function identifyElementWithComponents(
   element: HTMLElement,
-  reactMode: ReactComponentMode = "filtered",
+  componentMode: ReactComponentMode = "filtered",
 ): {
-  /** Combined name for display (React path + element) */
+  /** Combined name for display (component path + element) */
   name: string;
-  /** Raw element name without React path */
+  /** Raw element name without component path */
   elementName: string;
   /** DOM path */
   path: string;
-  /** React component path (e.g., '<SideNav> <LinkComponent>') */
+  /** Component path (e.g., '<SideNav> <LinkComponent>') */
   reactComponents: string | null;
 } {
   const { name: elementName, path } = identifyElement(element);
 
-  // If React detection is off, just return element info
-  if (reactMode === "off") {
+  // If component detection is off, just return element info
+  if (componentMode === "off") {
     return { name: elementName, elementName, path, reactComponents: null };
   }
 
-  const reactInfo = getReactComponentName(element, { mode: reactMode });
+  const info = getSolidComponentName(element, { mode: componentMode });
 
   return {
-    name: reactInfo.path ? `${reactInfo.path} ${elementName}` : elementName,
+    name: info.path ? `${info.path} ${elementName}` : elementName,
     elementName,
     path,
-    reactComponents: reactInfo.path,
+    reactComponents: info.path,
   };
 }
 
@@ -290,7 +289,7 @@ export type PageFeedbackToolbarCSSProps = {
   /** Webhook URL to receive annotation events. */
   webhookUrl?: string;
   /** Custom class name applied to the toolbar container. Use to adjust positioning or z-index. */
-  className?: string;
+  class?: string;
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
@@ -300,56 +299,37 @@ export type AgentationProps = PageFeedbackToolbarCSSProps;
 // Component
 // =============================================================================
 
-export function PageFeedbackToolbarCSS({
-  demoAnnotations,
-  demoDelay = 1000,
-  enableDemoMode = false,
-  onAnnotationAdd,
-  onAnnotationDelete,
-  onAnnotationUpdate,
-  onAnnotationsClear,
-  onCopy,
-  onSubmit,
-  copyToClipboard = true,
-  endpoint,
-  sessionId: initialSessionId,
-  onSessionCreated,
-  webhookUrl,
-  className: userClassName,
-}: PageFeedbackToolbarCSSProps = {}) {
-  const [isActive, setIsActive] = useState(false);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [showMarkers, setShowMarkers] = useState(true);
-  const [isToolbarHidden, setIsToolbarHidden] = useState(() => loadToolbarHidden());
-  const [isToolbarHiding, setIsToolbarHiding] = useState(false);
+export function PageFeedbackToolbarCSS(props: PageFeedbackToolbarCSSProps = {}) {
+  const [isActive, setIsActive] = createSignal(false);
+  const [annotations, setAnnotations] = createSignal<Annotation[]>([]);
+  const [showMarkers, setShowMarkers] = createSignal(true);
+  const [isToolbarHidden, setIsToolbarHidden] = createSignal(loadToolbarHidden());
+  const [isToolbarHiding, setIsToolbarHiding] = createSignal(false);
 
   // Stop native events from bubbling past document.body when they originate
   // inside the toolbar portal. Without this, clicks on the toolbar propagate to
   // document-level listeners, triggering "click outside" handlers that close
-  // modals, dropdowns, and drawers. We attach to body (not a wrapper div) so
-  // React's synthetic event delegation (which also listens on body/root) still
-  // works — we only block propagation from body → document/window.
-  const portalWrapperRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  // modals, dropdowns, and drawers.
+  let portalWrapperRef: HTMLDivElement | undefined;
+  onMount(() => {
     const stop = (e: Event) => {
-      const wrapper = portalWrapperRef.current;
-      if (wrapper && wrapper.contains(e.target as Node)) {
+      if (portalWrapperRef && portalWrapperRef.contains(e.target as Node)) {
         e.stopPropagation();
       }
     };
     const events = ["mousedown", "click", "pointerdown"] as const;
     events.forEach((evt) => document.body.addEventListener(evt, stop));
-    return () => {
+    onCleanup(() => {
       events.forEach((evt) => document.body.removeEventListener(evt, stop));
-    };
-  }, []);
+    });
+  });
 
   // Unified marker visibility state - controls both toolbar and eye toggle
-  const [markersVisible, setMarkersVisible] = useState(false);
-  const [markersExiting, setMarkersExiting] = useState(false);
-  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
-  const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
-  const [pendingAnnotation, setPendingAnnotation] = useState<{
+  const [markersVisible, setMarkersVisible] = createSignal(false);
+  const [markersExiting, setMarkersExiting] = createSignal(false);
+  const [hoverInfo, setHoverInfo] = createSignal<HoverInfo | null>(null);
+  const [hoverPosition, setHoverPosition] = createSignal({ x: 0, y: 0 });
+  const [pendingAnnotation, setPendingAnnotation] = createSignal<{
     x: number;
     y: number;
     clientY: number;
@@ -379,45 +359,43 @@ export function PageFeedbackToolbarCSS({
     // Element reference for single-select (for live position queries)
     targetElement?: HTMLElement;
   } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [sendState, setSendState] = useState<
+  const [copied, setCopied] = createSignal(false);
+  const [sendState, setSendState] = createSignal<
     "idle" | "sending" | "sent" | "failed"
   >("idle");
-  const [cleared, setCleared] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
-  const [hoveredMarkerId, setHoveredMarkerId] = useState<string | null>(null);
+  const [cleared, setCleared] = createSignal(false);
+  const [isClearing, setIsClearing] = createSignal(false);
+  const [hoveredMarkerId, setHoveredMarkerId] = createSignal<string | null>(null);
   const [hoveredTargetElement, setHoveredTargetElement] =
-    useState<HTMLElement | null>(null);
-  const [hoveredTargetElements, setHoveredTargetElements] = useState<
+    createSignal<HTMLElement | null>(null);
+  const [hoveredTargetElements, setHoveredTargetElements] = createSignal<
     HTMLElement[]
   >([]); // For cmd+shift+click multi-select hover
-  const [deletingMarkerId, setDeletingMarkerId] = useState<string | null>(null);
-  const [renumberFrom, setRenumberFrom] = useState<number | null>(null);
-  const [editingAnnotation, setEditingAnnotation] = useState<Annotation | null>(
+  const [deletingMarkerId, setDeletingMarkerId] = createSignal<string | null>(null);
+  const [renumberFrom, setRenumberFrom] = createSignal<number | null>(null);
+  const [editingAnnotation, setEditingAnnotation] = createSignal<Annotation | null>(
     null,
   );
   const [editingTargetElement, setEditingTargetElement] =
-    useState<HTMLElement | null>(null);
-  const [editingTargetElements, setEditingTargetElements] = useState<
+    createSignal<HTMLElement | null>(null);
+  const [editingTargetElements, setEditingTargetElements] = createSignal<
     HTMLElement[]
   >([]); // For cmd+shift+click multi-select
-  const [scrollY, setScrollY] = useState(0);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [isFrozen, setIsFrozen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSettingsVisible, setShowSettingsVisible] = useState(false);
-  const [settingsPage, setSettingsPage] = useState<"main" | "automations">(
+  const [scrollY, setScrollY] = createSignal(0);
+  const [isScrolling, setIsScrolling] = createSignal(false);
+  const [mounted, setMounted] = createSignal(false);
+  const [isFrozen, setIsFrozen] = createSignal(false);
+  const [showSettings, setShowSettings] = createSignal(false);
+  const [showSettingsVisible, setShowSettingsVisible] = createSignal(false);
+  const [settingsPage, setSettingsPage] = createSignal<"main" | "automations">(
     "main",
   );
-  const [tooltipsHidden, setTooltipsHidden] = useState(false);
-  const [tooltipSessionActive, setTooltipSessionActive] = useState(false);
-  const tooltipSessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const [tooltipsHidden, setTooltipsHidden] = createSignal(false);
+  const [tooltipSessionActive, setTooltipSessionActive] = createSignal(false);
+  let tooltipSessionTimerRef: ReturnType<typeof setTimeout> | null = null;
 
   // Cmd+shift+click multi-select state
-  const [pendingMultiSelectElements, setPendingMultiSelectElements] = useState<
+  const [pendingMultiSelectElements, setPendingMultiSelectElements] = createSignal<
     Array<{
       element: HTMLElement;
       rect: DOMRect;
@@ -426,7 +404,7 @@ export function PageFeedbackToolbarCSS({
       reactComponents?: string;
     }>
   >([]);
-  const modifiersHeldRef = useRef({ cmd: false, shift: false });
+  let modifiersHeld = { cmd: false, shift: false };
 
   // Hide tooltips after button click until mouse leaves
   const hideTooltipsUntilMouseLeave = () => {
@@ -438,8 +416,8 @@ export function PageFeedbackToolbarCSS({
   };
 
   const handleControlsMouseEnter = () => {
-    if (!tooltipSessionActive) {
-      tooltipSessionTimerRef.current = setTimeout(
+    if (!tooltipSessionActive()) {
+      tooltipSessionTimerRef = setTimeout(
         () => setTooltipSessionActive(true),
         850,
       );
@@ -447,109 +425,107 @@ export function PageFeedbackToolbarCSS({
   };
 
   const handleControlsMouseLeave = () => {
-    if (tooltipSessionTimerRef.current) {
-      clearTimeout(tooltipSessionTimerRef.current);
-      tooltipSessionTimerRef.current = null;
+    if (tooltipSessionTimerRef) {
+      clearTimeout(tooltipSessionTimerRef);
+      tooltipSessionTimerRef = null;
     }
     setTooltipSessionActive(false);
     showTooltipsAgain();
   };
 
-  useEffect(() => {
-    return () => {
-      if (tooltipSessionTimerRef.current)
-        clearTimeout(tooltipSessionTimerRef.current);
-    };
-  }, []);
+  onCleanup(() => {
+    if (tooltipSessionTimerRef)
+      clearTimeout(tooltipSessionTimerRef);
+  });
 
-const [settings, setSettings] = useState<ToolbarSettings>(() => {
-  try {
-    const saved = JSON.parse(localStorage.getItem("feedback-toolbar-settings") ?? "");
-    return {
-      ...DEFAULT_SETTINGS,
-      ...saved,
-      annotationColorId: COLOR_OPTIONS.find(c => c.id === saved.annotationColorId)
-        ? saved.annotationColorId
-        : DEFAULT_SETTINGS.annotationColorId,
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-});
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [showEntranceAnimation, setShowEntranceAnimation] = useState(false);
+  const [settings, setSettings] = createSignal<ToolbarSettings>((() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("feedback-toolbar-settings") ?? "");
+      return {
+        ...DEFAULT_SETTINGS,
+        ...saved,
+        annotationColorId: COLOR_OPTIONS.find(c => c.id === saved.annotationColorId)
+          ? saved.annotationColorId
+          : DEFAULT_SETTINGS.annotationColorId,
+      };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  })());
+  const [isDarkMode, setIsDarkMode] = createSignal(true);
+  const [showEntranceAnimation, setShowEntranceAnimation] = createSignal(false);
 
   const toggleTheme = () => {
-    portalWrapperRef.current?.classList.add(styles.disableTransitions);
+    portalWrapperRef?.classList.add(styles.disableTransitions);
     setIsDarkMode((previous) => !previous);
     requestAnimationFrame(() => {
-      portalWrapperRef.current?.classList.remove(styles.disableTransitions);
+      portalWrapperRef?.classList.remove(styles.disableTransitions);
     });
   }
 
-  // Check if running in development mode - React detection only works in development mode
+  // Check if running in development mode - component detection only works in development mode
   const isDevMode = process.env.NODE_ENV === "development";
 
-  // Effective React mode - derived from outputDetail when enabled
-  const effectiveReactMode: ReactComponentMode =
-    isDevMode && settings.reactEnabled
-      ? OUTPUT_TO_REACT_MODE[settings.outputDetail]
+  // Effective component mode - derived from outputDetail when enabled
+  const effectiveReactMode = (): ReactComponentMode =>
+    isDevMode && settings().reactEnabled
+      ? OUTPUT_TO_REACT_MODE[settings().outputDetail]
       : "off";
 
   // Server sync state
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
-    initialSessionId ?? null,
+  const [currentSessionId, setCurrentSessionId] = createSignal<string | null>(
+    props.sessionId ?? null,
   );
-  const sessionInitializedRef = useRef(false);
-  const [connectionStatus, setConnectionStatus] = useState<
+  let sessionInitializedRef = false;
+  const [connectionStatus, setConnectionStatus] = createSignal<
     "disconnected" | "connecting" | "connected"
-  >(endpoint ? "connecting" : "disconnected");
+  >(props.endpoint ? "connecting" : "disconnected");
 
   // Draggable toolbar state
-  const [toolbarPosition, setToolbarPosition] = useState<{
+  const [toolbarPosition, setToolbarPosition] = createSignal<{
     x: number;
     y: number;
   } | null>(null);
-  const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState<{
+  const [isDraggingToolbar, setIsDraggingToolbar] = createSignal(false);
+  const [dragStartPos, setDragStartPos] = createSignal<{
     x: number;
     y: number;
     toolbarX: number;
     toolbarY: number;
   } | null>(null);
-  const justFinishedToolbarDragRef = useRef(false);
+  let justFinishedToolbarDragRef = false;
 
   // For animations - track which markers have animated in and which are exiting
-  const [animatedMarkers, setAnimatedMarkers] = useState<Set<string>>(
+  const [animatedMarkers, setAnimatedMarkers] = createSignal<Set<string>>(
     new Set(),
   );
-  const [exitingMarkers, setExitingMarkers] = useState<Set<string>>(new Set());
-  const [pendingExiting, setPendingExiting] = useState(false);
-  const [editExiting, setEditExiting] = useState(false);
+  const [exitingMarkers, setExitingMarkers] = createSignal<Set<string>>(new Set());
+  const [pendingExiting, setPendingExiting] = createSignal(false);
+  const [editExiting, setEditExiting] = createSignal(false);
 
-  // Multi-select drag state - use refs for all drag visuals to avoid re-renders
-  const [isDragging, setIsDragging] = useState(false);
-  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const dragRectRef = useRef<HTMLDivElement | null>(null);
-  const highlightsContainerRef = useRef<HTMLDivElement | null>(null);
-  const justFinishedDragRef = useRef(false);
-  const lastElementUpdateRef = useRef(0);
-  const recentlyAddedIdRef = useRef<string | null>(null);
-  const prevConnectionStatusRef = useRef<typeof connectionStatus | null>(null);
+  // Multi-select drag state - use plain variables for all drag visuals to avoid re-renders
+  const [isDragging, setIsDragging] = createSignal(false);
+  let mouseDownPosRef: { x: number; y: number } | null = null;
+  let dragStartRef: { x: number; y: number } | null = null;
+  let dragRectRef: HTMLDivElement | null = null;
+  let highlightsContainerRef: HTMLDivElement | null = null;
+  let justFinishedDragRef = false;
+  let lastElementUpdateRef = 0;
+  let recentlyAddedIdRef: string | null = null;
+  let prevConnectionStatusRef: "disconnected" | "connecting" | "connected" | null = null;
   const DRAG_THRESHOLD = 8;
-  const ELEMENT_UPDATE_THROTTLE = 50; // Faster updates since no React re-renders
+  const ELEMENT_UPDATE_THROTTLE = 50; // Faster updates since no framework re-renders
 
-  const popupRef = useRef<AnnotationPopupCSSHandle>(null);
-  const editPopupRef = useRef<AnnotationPopupCSSHandle>(null);
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  let popupRef: AnnotationPopupCSSHandle | undefined;
+  let editPopupRef: AnnotationPopupCSSHandle | undefined;
+  let scrollTimeoutRef: ReturnType<typeof setTimeout> | null = null;
 
   const pathname =
     typeof window !== "undefined" ? window.location.pathname : "/";
 
   // Handle showSettings changes with exit animation
-  useEffect(() => {
-    if (showSettings) {
+  createEffect(() => {
+    if (showSettings()) {
       setShowSettingsVisible(true);
     } else {
       // Reset tooltips when settings close (fixes tooltips not showing after closing settings)
@@ -557,42 +533,41 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       // Reset to main page when settings close
       setSettingsPage("main");
       const timer = originalSetTimeout(() => setShowSettingsVisible(false), 0);
-      return () => clearTimeout(timer);
+      onCleanup(() => clearTimeout(timer));
     }
-  }, [showSettings]);
+  });
 
   // Unified marker visibility - depends on BOTH toolbar active AND showMarkers toggle
   // This single effect handles all marker show/hide animations
-  const shouldShowMarkers = isActive && showMarkers;
-  useEffect(() => {
-    if (shouldShowMarkers) {
+  const shouldShowMarkers = () => isActive() && showMarkers();
+  createEffect(() => {
+    if (shouldShowMarkers()) {
       // Show markers - reset animations and make visible
       setMarkersExiting(false);
       setMarkersVisible(true);
-      setAnimatedMarkers(new Set());
+      setAnimatedMarkers(new Set<string>());
       // After enter animations complete, mark all as animated
       const timer = originalSetTimeout(() => {
         setAnimatedMarkers((prev) => {
           const newSet = new Set(prev);
-          annotations.forEach((a) => newSet.add(a.id));
+          annotations().forEach((a) => newSet.add(a.id));
           return newSet;
         });
       }, 350);
-      return () => clearTimeout(timer);
-    } else if (markersVisible) {
+      onCleanup(() => clearTimeout(timer));
+    } else if (markersVisible()) {
       // Hide markers - start exit animation, then unmount
       setMarkersExiting(true);
       const timer = originalSetTimeout(() => {
         setMarkersVisible(false);
         setMarkersExiting(false);
       }, 250);
-      return () => clearTimeout(timer);
+      onCleanup(() => clearTimeout(timer));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldShowMarkers]);
+  });
 
   // Mount and load
-  useEffect(() => {
+  onMount(() => {
     setMounted(true);
     setScrollY(window.scrollY);
     const stored = loadAnnotations<Annotation>(pathname);
@@ -629,47 +604,52 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     } catch (e) {
       // Ignore localStorage errors
     }
-  }, [pathname]);
+  });
 
   // Save settings
-  useEffect(() => {
-    if (mounted) {
+  createEffect(() => {
+    const s = settings();
+    if (mounted()) {
       localStorage.setItem(
         "feedback-toolbar-settings",
-        JSON.stringify(settings),
+        JSON.stringify(s),
       );
     }
-  }, [settings, mounted]);
+  });
 
   // Save theme preference
-  useEffect(() => {
-    if (mounted) {
+  createEffect(() => {
+    const dark = isDarkMode();
+    if (mounted()) {
       localStorage.setItem(
         "feedback-toolbar-theme",
-        isDarkMode ? "dark" : "light",
+        dark ? "dark" : "light",
       );
     }
-  }, [isDarkMode, mounted]);
+  });
 
   // Save toolbar position when drag ends
-  const prevDraggingRef = useRef(false);
-  useEffect(() => {
-    const wasDragging = prevDraggingRef.current;
-    prevDraggingRef.current = isDraggingToolbar;
+  let prevDraggingRef = false;
+  createEffect(() => {
+    const wasDragging = prevDraggingRef;
+    prevDraggingRef = isDraggingToolbar();
 
     // Save position when dragging ends (transition from true to false)
-    if (wasDragging && !isDraggingToolbar && toolbarPosition && mounted) {
+    if (wasDragging && !isDraggingToolbar() && toolbarPosition() && mounted()) {
       localStorage.setItem(
         "feedback-toolbar-position",
-        JSON.stringify(toolbarPosition),
+        JSON.stringify(toolbarPosition()),
       );
     }
-  }, [isDraggingToolbar, toolbarPosition, mounted]);
+  });
 
   // Initialize server session (when endpoint is provided)
-  useEffect(() => {
-    if (!endpoint || !mounted || sessionInitializedRef.current) return;
-    sessionInitializedRef.current = true;
+  createEffect(() => {
+    const endpoint = props.endpoint;
+    const initialSessionId = props.sessionId;
+    const onSessionCreated = props.onSessionCreated;
+    if (!endpoint || !mounted() || sessionInitializedRef) return;
+    sessionInitializedRef = true;
     setConnectionStatus("connecting");
 
     const initSession = async () => {
@@ -694,8 +674,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
             // 3. Annotations marked as synced to THIS session but missing from server
             //    (handles server-side deletion)
             const allLocalAnnotations = loadAnnotations<Annotation>(pathname);
-            const serverIds = new Set(session.annotations.map((a) => a.id));
-            const localToMerge = allLocalAnnotations.filter((a) => {
+            const serverIds = new Set(session.annotations.map((a: Annotation) => a.id));
+            const localToMerge = allLocalAnnotations.filter((a: Annotation) => {
               // If it exists on server, don't re-upload
               if (serverIds.has(a.id)) return false;
               // Otherwise, needs to be synced (whether never synced, synced elsewhere, or missing from server)
@@ -709,7 +689,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
               const pageUrl = `${baseUrl}${pathname}`;
 
               const results = await Promise.allSettled(
-                localToMerge.map((annotation) =>
+                localToMerge.map((annotation: Annotation) =>
                   syncAnnotation(endpoint, session.id, {
                     ...annotation,
                     sessionId: session.id,
@@ -780,10 +760,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
           // Sync annotations from all pages in parallel
           const syncPromises: Promise<void>[] = [];
-          for (const [pagePath, annotations] of allAnnotations) {
+          for (const [pagePath, pageAnnotations] of allAnnotations) {
             // Filter to only unsynced annotations
-            const unsyncedAnnotations = annotations.filter(
-              (a) => !(a as Annotation & { _syncedTo?: string })._syncedTo,
+            const unsyncedAnnotations = pageAnnotations.filter(
+              (a: Annotation) => !(a as Annotation & { _syncedTo?: string })._syncedTo,
             );
             if (unsyncedAnnotations.length === 0) continue;
 
@@ -799,7 +779,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                     : await createSession(endpoint, pageUrl);
 
                   const results = await Promise.allSettled(
-                    unsyncedAnnotations.map((annotation) =>
+                    unsyncedAnnotations.map((annotation: Annotation) =>
                       syncAnnotation(endpoint, targetSession.id, {
                         ...annotation,
                         sessionId: targetSession.id,
@@ -833,7 +813,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
                   if (isCurrentPage) {
                     const originalIds = new Set(
-                      unsyncedAnnotations.map((a) => a.id),
+                      unsyncedAnnotations.map((a: Annotation) => a.id),
                     );
                     setAnnotations((prev) => {
                       const newDuringSync = prev.filter(
@@ -865,11 +845,12 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
 
     initSession();
-  }, [endpoint, initialSessionId, mounted, onSessionCreated, pathname]);
+  });
 
   // Periodic health check for server connection
-  useEffect(() => {
-    if (!endpoint || !mounted) return;
+  createEffect(() => {
+    const endpoint = props.endpoint;
+    if (!endpoint || !mounted()) return;
 
     const checkHealth = async () => {
       try {
@@ -887,15 +868,17 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     // Check immediately, then every 10 seconds
     checkHealth();
     const interval = originalSetInterval(checkHealth, 10000);
-    return () => clearInterval(interval);
-  }, [endpoint, mounted]);
+    onCleanup(() => clearInterval(interval));
+  });
 
   // Listen for server-side annotation updates (e.g. resolved by agent)
-  useEffect(() => {
-    if (!endpoint || !mounted || !currentSessionId) return;
+  createEffect(() => {
+    const endpoint = props.endpoint;
+    const sessId = currentSessionId();
+    if (!endpoint || !mounted() || !sessId) return;
 
     const eventSource = new EventSource(
-      `${endpoint}/sessions/${currentSessionId}/events`
+      `${endpoint}/sessions/${sessId}/events`
     );
 
     const removedStatuses = ["resolved", "dismissed"];
@@ -923,20 +906,23 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     eventSource.addEventListener("annotation.updated", handler);
 
-    return () => {
+    onCleanup(() => {
       eventSource.removeEventListener("annotation.updated", handler);
       eventSource.close();
-    };
-  }, [endpoint, mounted, currentSessionId]);
+    });
+  });
 
   // Sync local annotations when connection is restored
-  useEffect(() => {
-    if (!endpoint || !mounted) return;
+  createEffect(() => {
+    const endpoint = props.endpoint;
+    const status = connectionStatus();
+    const sessId = currentSessionId();
+    if (!endpoint || !mounted()) return;
 
     // Check if we just reconnected (was disconnected, now connected)
-    const wasDisconnected = prevConnectionStatusRef.current === "disconnected";
-    const isNowConnected = connectionStatus === "connected";
-    prevConnectionStatusRef.current = connectionStatus;
+    const wasDisconnected = prevConnectionStatusRef === "disconnected";
+    const isNowConnected = status === "connected";
+    prevConnectionStatusRef = status;
 
     if (wasDisconnected && isNowConnected) {
       // Sync any local annotations that aren't on the server
@@ -949,7 +935,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           const pageUrl = `${baseUrl}${pathname}`;
 
           // Get or create session
-          let sessionId = currentSessionId;
+          let sessionId = sessId;
           let serverAnnotations: Annotation[] = [];
 
           if (sessionId) {
@@ -1013,10 +999,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       syncLocalAnnotations();
     }
-  }, [connectionStatus, endpoint, mounted, currentSessionId, pathname]);
+  });
 
-  const hideToolbarTemporarily = useCallback(() => {
-    if (isToolbarHiding) return;
+  const hideToolbarTemporarily = () => {
+    if (isToolbarHiding()) return;
     setIsToolbarHiding(true);
     setShowSettings(false);
     setIsActive(false);
@@ -1025,14 +1011,15 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       setIsToolbarHidden(true);
       setIsToolbarHiding(false);
     }, 400);
-  }, [isToolbarHiding]);
+  };
 
   // Demo annotations
-  useEffect(() => {
-    if (!enableDemoMode) return;
-    if (!mounted || !demoAnnotations || demoAnnotations.length === 0) return;
-    if (annotations.length > 0) return;
+  createEffect(() => {
+    if (!props.enableDemoMode) return;
+    if (!mounted() || !props.demoAnnotations || props.demoAnnotations.length === 0) return;
+    if (annotations().length > 0) return;
 
+    const demoDelay = props.demoDelay ?? 1000;
     const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
     timeoutIds.push(
@@ -1041,7 +1028,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       }, demoDelay - 200),
     );
 
-    demoAnnotations.forEach((demo, index) => {
+    props.demoAnnotations.forEach((demo, index) => {
       const annotationDelay = demoDelay + index * 300;
 
       timeoutIds.push(
@@ -1076,81 +1063,84 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       );
     });
 
-    return () => {
+    onCleanup(() => {
       timeoutIds.forEach(clearTimeout);
-    };
-  }, [enableDemoMode, mounted, demoAnnotations, demoDelay]);
+    });
+  });
 
   // Track scroll
-  useEffect(() => {
+  onMount(() => {
     const handleScroll = () => {
       setScrollY(window.scrollY);
       setIsScrolling(true);
 
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
+      if (scrollTimeoutRef) {
+        clearTimeout(scrollTimeoutRef);
       }
 
-      scrollTimeoutRef.current = originalSetTimeout(() => {
+      scrollTimeoutRef = originalSetTimeout(() => {
         setIsScrolling(false);
       }, 150);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
+    onCleanup(() => {
       window.removeEventListener("scroll", handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
+      if (scrollTimeoutRef) {
+        clearTimeout(scrollTimeoutRef);
       }
-    };
-  }, []);
+    });
+  });
 
   // Save annotations (preserving sync markers if connected to a session)
-  useEffect(() => {
-    if (mounted && annotations.length > 0) {
-      if (currentSessionId) {
+  createEffect(() => {
+    const anns = annotations();
+    const sessId = currentSessionId();
+    if (mounted() && anns.length > 0) {
+      if (sessId) {
         // Connected to session - save with sync marker to prevent re-upload on refresh
-        saveAnnotationsWithSyncMarker(pathname, annotations, currentSessionId);
+        saveAnnotationsWithSyncMarker(pathname, anns, sessId);
       } else {
         // Not connected - save without markers (will sync when connected)
-        saveAnnotations(pathname, annotations);
+        saveAnnotations(pathname, anns);
       }
-    } else if (mounted && annotations.length === 0) {
+    } else if (mounted() && anns.length === 0) {
       localStorage.removeItem(getStorageKey(pathname));
     }
-  }, [annotations, pathname, mounted, currentSessionId]);
+  });
 
   // Freeze animations (delegates to freeze-animations utility)
-  const freezeAnimations = useCallback(() => {
-    if (isFrozen) return;
+  const freezeAnimations = () => {
+    if (isFrozen()) return;
     freezeAll();
     setIsFrozen(true);
-  }, [isFrozen]);
+  };
 
-  const unfreezeAnimations = useCallback(() => {
-    if (!isFrozen) return;
+  const unfreezeAnimations = () => {
+    if (!isFrozen()) return;
     unfreezeAll();
     setIsFrozen(false);
-  }, [isFrozen]);
+  };
 
-  const toggleFreeze = useCallback(() => {
-    if (isFrozen) {
+  const toggleFreeze = () => {
+    if (isFrozen()) {
       unfreezeAnimations();
     } else {
       freezeAnimations();
     }
-  }, [isFrozen, freezeAnimations, unfreezeAnimations]);
+  };
 
   // Create pending annotation from cmd+shift+click multi-select
-  const createMultiSelectPendingAnnotation = useCallback(() => {
-    if (pendingMultiSelectElements.length === 0) return;
+  const createMultiSelectPendingAnnotation = () => {
+    if (pendingMultiSelectElements().length === 0) return;
 
-    const firstItem = pendingMultiSelectElements[0];
+    const elements = pendingMultiSelectElements();
+    const firstItem = elements[0];
     const firstEl = firstItem.element;
-    const isMulti = pendingMultiSelectElements.length > 1;
+    const isMulti = elements.length > 1;
 
     // Get fresh rects for all elements
-    const freshRects = pendingMultiSelectElements.map((item) =>
+    const freshRects = elements.map((item) =>
       item.element.getBoundingClientRect(),
     );
 
@@ -1191,13 +1181,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         bottom: Math.max(...freshRects.map((r) => r.bottom)),
       };
 
-      const names = pendingMultiSelectElements
+      const names = elements
         .slice(0, 5)
         .map((item) => item.name)
         .join(", ");
       const suffix =
-        pendingMultiSelectElements.length > 5
-          ? ` +${pendingMultiSelectElements.length - 5} more`
+        elements.length > 5
+          ? ` +${elements.length - 5} more`
           : "";
 
       const elementBoundingBoxes = freshRects.map((rect) => ({
@@ -1208,7 +1198,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       }));
 
       // Position marker near the last selected element (most recent click)
-      const lastItem = pendingMultiSelectElements[pendingMultiSelectElements.length - 1];
+      const lastItem = elements[elements.length - 1];
       const lastEl = lastItem.element;
       const lastRect = freshRects[freshRects.length - 1];
       const lastCenterX = lastRect.left + lastRect.width / 2;
@@ -1219,7 +1209,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         x: (lastCenterX / window.innerWidth) * 100,
         y: lastIsFixed ? lastCenterY : lastCenterY + window.scrollY,
         clientY: lastCenterY,
-        element: `${pendingMultiSelectElements.length} elements: ${names}${suffix}`,
+        element: `${elements.length} elements: ${names}${suffix}`,
         elementPath: "multi-select",
         boundingBox: {
           x: bounds.left,
@@ -1230,7 +1220,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         isMultiSelect: true,
         isFixed: lastIsFixed,
         elementBoundingBoxes,
-        multiSelectElements: pendingMultiSelectElements.map((item) => item.element),
+        multiSelectElements: elements.map((item) => item.element),
         targetElement: lastEl, // Anchor marker/popup to last clicked element
         fullPath: getFullElementPath(firstEl),
         accessibility: getAccessibilityInfo(firstEl),
@@ -1245,11 +1235,11 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     setPendingMultiSelectElements([]);
     setHoverInfo(null);
-  }, [pendingMultiSelectElements]);
+  };
 
   // Reset state when deactivating
-  useEffect(() => {
-    if (!isActive) {
+  createEffect(() => {
+    if (!isActive()) {
       setPendingAnnotation(null);
       setEditingAnnotation(null);
       setEditingTargetElement(null);
@@ -1257,23 +1247,21 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       setHoverInfo(null);
       setShowSettings(false); // Close settings when toolbar closes
       setPendingMultiSelectElements([]); // Clear multi-select
-      modifiersHeldRef.current = { cmd: false, shift: false }; // Reset modifier tracking
-      if (isFrozen) {
+      modifiersHeld = { cmd: false, shift: false }; // Reset modifier tracking
+      if (isFrozen()) {
         unfreezeAnimations();
       }
     }
-  }, [isActive, isFrozen, unfreezeAnimations]);
+  });
 
   // Unmount safety — if component is removed while frozen, unfreeze the page
-  useEffect(() => {
-    return () => {
-      unfreezeAll();
-    };
-  }, []);
+  onCleanup(() => {
+    unfreezeAll();
+  });
 
   // Custom cursor
-  useEffect(() => {
-    if (!isActive) return;
+  createEffect(() => {
+    if (!isActive()) return;
 
     const textElementsSelector = [
       "p", "span", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -1301,15 +1289,15 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     `;
     document.head.appendChild(style);
 
-    return () => {
+    onCleanup(() => {
       const existingStyle = document.getElementById("feedback-cursor-styles");
       if (existingStyle) existingStyle.remove();
-    };
-  }, [isActive]);
+    });
+  });
 
   // Handle mouse move
-  useEffect(() => {
-    if (!isActive || pendingAnnotation) return;
+  createEffect(() => {
+    if (!isActive() || pendingAnnotation()) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       // Use composedPath to get actual target inside shadow DOM
@@ -1329,7 +1317,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       }
 
       const { name, elementName, path, reactComponents } =
-        identifyElementWithReact(elementUnder, effectiveReactMode);
+        identifyElementWithComponents(elementUnder, effectiveReactMode());
       const rect = elementUnder.getBoundingClientRect();
 
       setHoverInfo({
@@ -1343,16 +1331,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
 
     document.addEventListener("mousemove", handleMouseMove);
-    return () => document.removeEventListener("mousemove", handleMouseMove);
-  }, [isActive, pendingAnnotation, effectiveReactMode]);
+    onCleanup(() => document.removeEventListener("mousemove", handleMouseMove));
+  });
 
   // Handle click
-  useEffect(() => {
-    if (!isActive) return;
+  createEffect(() => {
+    if (!isActive()) return;
 
     const handleClick = (e: MouseEvent) => {
-      if (justFinishedDragRef.current) {
-        justFinishedDragRef.current = false;
+      if (justFinishedDragRef) {
+        justFinishedDragRef = false;
         return;
       }
 
@@ -1364,7 +1352,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       if (closestCrossingShadow(target, "[data-annotation-marker]")) return;
 
       // Handle cmd+shift+click for multi-element selection
-      if (e.metaKey && e.shiftKey && !pendingAnnotation && !editingAnnotation) {
+      if (e.metaKey && e.shiftKey && !pendingAnnotation() && !editingAnnotation()) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -1372,13 +1360,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         if (!elementUnder) return;
 
         const rect = elementUnder.getBoundingClientRect();
-        const { name, path, reactComponents } = identifyElementWithReact(
+        const { name, path, reactComponents } = identifyElementWithComponents(
           elementUnder,
-          effectiveReactMode,
+          effectiveReactMode(),
         );
 
         // Toggle: check if already selected
-        const existingIndex = pendingMultiSelectElements.findIndex(
+        const existingIndex = pendingMultiSelectElements().findIndex(
           (item) => item.element === elementUnder,
         );
 
@@ -1409,27 +1397,27 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       );
 
       // Block interactions on interactive elements when enabled
-      if (settings.blockInteractions && isInteractive) {
+      if (settings().blockInteractions && isInteractive) {
         e.preventDefault();
         e.stopPropagation();
         // Still create annotation on the interactive element
       }
 
-      if (pendingAnnotation) {
-        if (isInteractive && !settings.blockInteractions) {
+      if (pendingAnnotation()) {
+        if (isInteractive && !settings().blockInteractions) {
           return;
         }
         e.preventDefault();
-        popupRef.current?.shake();
+        popupRef?.shake();
         return;
       }
 
-      if (editingAnnotation) {
-        if (isInteractive && !settings.blockInteractions) {
+      if (editingAnnotation()) {
+        if (isInteractive && !settings().blockInteractions) {
           return;
         }
         e.preventDefault();
-        editPopupRef.current?.shake();
+        editPopupRef?.shake();
         return;
       }
 
@@ -1438,9 +1426,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
       if (!elementUnder) return;
 
-      const { name, path, reactComponents } = identifyElementWithReact(
+      const { name, path, reactComponents } = identifyElementWithComponents(
         elementUnder,
-        effectiveReactMode,
+        effectiveReactMode(),
       );
       const rect = elementUnder.getBoundingClientRect();
       const x = (e.clientX / window.innerWidth) * 100;
@@ -1488,40 +1476,33 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     // Use capture phase to intercept before element handlers
     document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
-  }, [
-    isActive,
-    pendingAnnotation,
-    editingAnnotation,
-    settings.blockInteractions,
-    effectiveReactMode,
-    pendingMultiSelectElements,
-  ]);
+    onCleanup(() => document.removeEventListener("click", handleClick, true));
+  });
 
   // Cmd+shift+click multi-select: keyup listener for modifier release
-  useEffect(() => {
-    if (!isActive) return;
+  createEffect(() => {
+    if (!isActive()) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Meta") modifiersHeldRef.current.cmd = true;
-      if (e.key === "Shift") modifiersHeldRef.current.shift = true;
+      if (e.key === "Meta") modifiersHeld.cmd = true;
+      if (e.key === "Shift") modifiersHeld.shift = true;
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const wasHoldingBoth =
-        modifiersHeldRef.current.cmd && modifiersHeldRef.current.shift;
+        modifiersHeld.cmd && modifiersHeld.shift;
 
-      if (e.key === "Meta") modifiersHeldRef.current.cmd = false;
-      if (e.key === "Shift") modifiersHeldRef.current.shift = false;
+      if (e.key === "Meta") modifiersHeld.cmd = false;
+      if (e.key === "Shift") modifiersHeld.shift = false;
 
       const nowHoldingBoth =
-        modifiersHeldRef.current.cmd && modifiersHeldRef.current.shift;
+        modifiersHeld.cmd && modifiersHeld.shift;
 
-      // Released modifier while holding elements → trigger popup
+      // Released modifier while holding elements -> trigger popup
       if (
         wasHoldingBoth &&
         !nowHoldingBoth &&
-        pendingMultiSelectElements.length > 0
+        pendingMultiSelectElements().length > 0
       ) {
         createMultiSelectPendingAnnotation();
       }
@@ -1529,23 +1510,23 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     // Reset modifier state AND clear selection when window loses focus (e.g., cmd+tab away)
     const handleBlur = () => {
-      modifiersHeldRef.current = { cmd: false, shift: false };
+      modifiersHeld = { cmd: false, shift: false };
       setPendingMultiSelectElements([]);
     };
 
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keyup", handleKeyUp);
     window.addEventListener("blur", handleBlur);
-    return () => {
+    onCleanup(() => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
-    };
-  }, [isActive, pendingMultiSelectElements, createMultiSelectPendingAnnotation]);
+    });
+  });
 
   // Multi-select drag - mousedown
-  useEffect(() => {
-    if (!isActive || pendingAnnotation) return;
+  createEffect(() => {
+    if (!isActive() || pendingAnnotation()) return;
 
     const handleMouseDown = (e: MouseEvent) => {
       // Use composedPath to get actual target inside shadow DOM
@@ -1600,51 +1581,51 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         return;
       }
 
-      mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+      mouseDownPosRef = { x: e.clientX, y: e.clientY };
     };
 
     document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [isActive, pendingAnnotation]);
+    onCleanup(() => document.removeEventListener("mousedown", handleMouseDown));
+  });
 
   // Multi-select drag - mousemove (fully optimized with direct DOM updates)
-  useEffect(() => {
-    if (!isActive || pendingAnnotation) return;
+  createEffect(() => {
+    if (!isActive() || pendingAnnotation()) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!mouseDownPosRef.current) return;
+      if (!mouseDownPosRef) return;
 
-      const dx = e.clientX - mouseDownPosRef.current.x;
-      const dy = e.clientY - mouseDownPosRef.current.y;
+      const dx = e.clientX - mouseDownPosRef.x;
+      const dy = e.clientY - mouseDownPosRef.y;
       const distance = dx * dx + dy * dy;
       const thresholdSq = DRAG_THRESHOLD * DRAG_THRESHOLD;
 
-      if (!isDragging && distance >= thresholdSq) {
-        dragStartRef.current = mouseDownPosRef.current;
+      if (!isDragging() && distance >= thresholdSq) {
+        dragStartRef = mouseDownPosRef;
         setIsDragging(true);
       }
 
-      if ((isDragging || distance >= thresholdSq) && dragStartRef.current) {
-        // Direct DOM update for drag rectangle - no React state
-        if (dragRectRef.current) {
-          const left = Math.min(dragStartRef.current.x, e.clientX);
-          const top = Math.min(dragStartRef.current.y, e.clientY);
-          const width = Math.abs(e.clientX - dragStartRef.current.x);
-          const height = Math.abs(e.clientY - dragStartRef.current.y);
-          dragRectRef.current.style.transform = `translate(${left}px, ${top}px)`;
-          dragRectRef.current.style.width = `${width}px`;
-          dragRectRef.current.style.height = `${height}px`;
+      if ((isDragging() || distance >= thresholdSq) && dragStartRef) {
+        // Direct DOM update for drag rectangle - no state
+        if (dragRectRef) {
+          const left = Math.min(dragStartRef.x, e.clientX);
+          const top = Math.min(dragStartRef.y, e.clientY);
+          const width = Math.abs(e.clientX - dragStartRef.x);
+          const height = Math.abs(e.clientY - dragStartRef.y);
+          dragRectRef.style.transform = `translate(${left}px, ${top}px)`;
+          dragRectRef.style.width = `${width}px`;
+          dragRectRef.style.height = `${height}px`;
         }
 
-        // Throttle element detection (still no React re-renders)
+        // Throttle element detection (still no framework re-renders)
         const now = Date.now();
-        if (now - lastElementUpdateRef.current < ELEMENT_UPDATE_THROTTLE) {
+        if (now - lastElementUpdateRef < ELEMENT_UPDATE_THROTTLE) {
           return;
         }
-        lastElementUpdateRef.current = now;
+        lastElementUpdateRef = now;
 
-        const startX = dragStartRef.current.x;
-        const startY = dragStartRef.current.y;
+        const startX = dragStartRef.x;
+        const startY = dragStartRef.y;
         const left = Math.min(startX, e.clientX);
         const top = Math.min(startY, e.clientY);
         const right = Math.max(startX, e.clientX);
@@ -1791,9 +1772,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           }
         }
 
-        // Direct DOM update for highlights - no React state
-        if (highlightsContainerRef.current) {
-          const container = highlightsContainerRef.current;
+        // Direct DOM update for highlights - no state
+        if (highlightsContainerRef) {
+          const container = highlightsContainerRef;
           // Reuse existing divs or create new ones
           while (container.children.length > allMatching.length) {
             container.removeChild(container.lastChild!);
@@ -1814,19 +1795,19 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
 
     document.addEventListener("mousemove", handleMouseMove, { passive: true });
-    return () => document.removeEventListener("mousemove", handleMouseMove);
-  }, [isActive, pendingAnnotation, isDragging, DRAG_THRESHOLD]);
+    onCleanup(() => document.removeEventListener("mousemove", handleMouseMove));
+  });
 
   // Multi-select drag - mouseup
-  useEffect(() => {
-    if (!isActive) return;
+  createEffect(() => {
+    if (!isActive()) return;
 
     const handleMouseUp = (e: MouseEvent) => {
-      const wasDragging = isDragging;
-      const dragStart = dragStartRef.current;
+      const wasDragging = isDragging();
+      const dragStart = dragStartRef;
 
-      if (isDragging && dragStart) {
-        justFinishedDragRef.current = true;
+      if (isDragging() && dragStart) {
+        justFinishedDragRef = true;
 
         // Do final element detection for accurate count
         const left = Math.min(dragStart.x, e.clientX);
@@ -1957,221 +1938,208 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         }
         setHoverInfo(null);
       } else if (wasDragging) {
-        justFinishedDragRef.current = true;
+        justFinishedDragRef = true;
       }
 
-      mouseDownPosRef.current = null;
-      dragStartRef.current = null;
+      mouseDownPosRef = null;
+      dragStartRef = null;
       setIsDragging(false);
       // Clear highlights container
-      if (highlightsContainerRef.current) {
-        highlightsContainerRef.current.innerHTML = "";
+      if (highlightsContainerRef) {
+        highlightsContainerRef.innerHTML = "";
       }
     };
 
     document.addEventListener("mouseup", handleMouseUp);
-    return () => document.removeEventListener("mouseup", handleMouseUp);
-  }, [isActive, isDragging]);
+    onCleanup(() => document.removeEventListener("mouseup", handleMouseUp));
+  });
 
   // Fire webhook for annotation events - returns true on success, false on failure
-  const fireWebhook = useCallback(
-    async (
-      event: string,
-      payload: Record<string, unknown>,
-      force?: boolean,
-    ): Promise<boolean> => {
-      // Settings webhookUrl overrides prop
-      const targetUrl = settings.webhookUrl || webhookUrl;
-      // Skip if no URL, or if webhooks disabled (unless force is true for manual sends)
-      if (!targetUrl || (!settings.webhooksEnabled && !force)) return false;
+  const fireWebhook = async (
+    event: string,
+    payload: Record<string, unknown>,
+    force?: boolean,
+  ): Promise<boolean> => {
+    // Settings webhookUrl overrides prop
+    const targetUrl = settings().webhookUrl || props.webhookUrl;
+    // Skip if no URL, or if webhooks disabled (unless force is true for manual sends)
+    if (!targetUrl || (!settings().webhooksEnabled && !force)) return false;
 
-      try {
-        const response = await fetch(targetUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event,
-            timestamp: Date.now(),
-            url:
-              typeof window !== "undefined" ? window.location.href : undefined,
-            ...payload,
-          }),
-        });
-        return response.ok;
-      } catch (error) {
-        console.warn("[Agentation] Webhook failed:", error);
-        return false;
-      }
-    },
-    [webhookUrl, settings.webhookUrl, settings.webhooksEnabled],
-  );
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event,
+          timestamp: Date.now(),
+          url:
+            typeof window !== "undefined" ? window.location.href : undefined,
+          ...payload,
+        }),
+      });
+      return response.ok;
+    } catch (error) {
+      console.warn("[Agentation] Webhook failed:", error);
+      return false;
+    }
+  };
 
   // Add annotation
-  const addAnnotation = useCallback(
-    (comment: string) => {
-      if (!pendingAnnotation) return;
+  const addAnnotation = (comment: string) => {
+    const pending = pendingAnnotation();
+    if (!pending) return;
 
-      const newAnnotation: Annotation = {
-        id: Date.now().toString(),
-        x: pendingAnnotation.x,
-        y: pendingAnnotation.y,
-        comment,
-        element: pendingAnnotation.element,
-        elementPath: pendingAnnotation.elementPath,
-        timestamp: Date.now(),
-        selectedText: pendingAnnotation.selectedText,
-        boundingBox: pendingAnnotation.boundingBox,
-        nearbyText: pendingAnnotation.nearbyText,
-        cssClasses: pendingAnnotation.cssClasses,
-        isMultiSelect: pendingAnnotation.isMultiSelect,
-        isFixed: pendingAnnotation.isFixed,
-        fullPath: pendingAnnotation.fullPath,
-        accessibility: pendingAnnotation.accessibility,
-        computedStyles: pendingAnnotation.computedStyles,
-        nearbyElements: pendingAnnotation.nearbyElements,
-        reactComponents: pendingAnnotation.reactComponents,
-        sourceFile: pendingAnnotation.sourceFile,
-        elementBoundingBoxes: pendingAnnotation.elementBoundingBoxes,
-        // Protocol fields for server sync
-        ...(endpoint && currentSessionId
-          ? {
-              sessionId: currentSessionId,
-              url:
-                typeof window !== "undefined"
-                  ? window.location.href
-                  : undefined,
-              status: "pending" as const,
-            }
-          : {}),
-      };
+    const newAnnotation: Annotation = {
+      id: Date.now().toString(),
+      x: pending.x,
+      y: pending.y,
+      comment,
+      element: pending.element,
+      elementPath: pending.elementPath,
+      timestamp: Date.now(),
+      selectedText: pending.selectedText,
+      boundingBox: pending.boundingBox,
+      nearbyText: pending.nearbyText,
+      cssClasses: pending.cssClasses,
+      isMultiSelect: pending.isMultiSelect,
+      isFixed: pending.isFixed,
+      fullPath: pending.fullPath,
+      accessibility: pending.accessibility,
+      computedStyles: pending.computedStyles,
+      nearbyElements: pending.nearbyElements,
+      reactComponents: pending.reactComponents,
+      sourceFile: pending.sourceFile,
+      elementBoundingBoxes: pending.elementBoundingBoxes,
+      // Protocol fields for server sync
+      ...(props.endpoint && currentSessionId()
+        ? {
+            sessionId: currentSessionId()!,
+            url:
+              typeof window !== "undefined"
+                ? window.location.href
+                : undefined,
+            status: "pending" as const,
+          }
+        : {}),
+    };
 
-      setAnnotations((prev) => [...prev, newAnnotation]);
-      // Prevent immediate hover on newly added marker
-      recentlyAddedIdRef.current = newAnnotation.id;
-      originalSetTimeout(() => {
-        recentlyAddedIdRef.current = null;
-      }, 300);
-      // Mark as needing animation (will be set to animated after animation completes)
-      originalSetTimeout(() => {
-        setAnimatedMarkers((prev) => new Set(prev).add(newAnnotation.id));
-      }, 250);
+    setAnnotations((prev) => [...prev, newAnnotation]);
+    // Prevent immediate hover on newly added marker
+    recentlyAddedIdRef = newAnnotation.id;
+    originalSetTimeout(() => {
+      recentlyAddedIdRef = null;
+    }, 300);
+    // Mark as needing animation (will be set to animated after animation completes)
+    originalSetTimeout(() => {
+      setAnimatedMarkers((prev) => new Set(prev).add(newAnnotation.id));
+    }, 250);
 
-      // Fire callback
-      onAnnotationAdd?.(newAnnotation);
-      fireWebhook("annotation.add", { annotation: newAnnotation });
+    // Fire callback
+    props.onAnnotationAdd?.(newAnnotation);
+    fireWebhook("annotation.add", { annotation: newAnnotation });
 
-      // Animate out the pending annotation UI
-      setPendingExiting(true);
-      originalSetTimeout(() => {
-        setPendingAnnotation(null);
-        setPendingExiting(false);
-      }, 150);
+    // Animate out the pending annotation UI
+    setPendingExiting(true);
+    originalSetTimeout(() => {
+      setPendingAnnotation(null);
+      setPendingExiting(false);
+    }, 150);
 
-      window.getSelection()?.removeAllRanges();
+    window.getSelection()?.removeAllRanges();
 
-      // Sync to server (non-blocking, but update local ID with server's ID)
-      if (endpoint && currentSessionId) {
-        syncAnnotation(endpoint, currentSessionId, newAnnotation)
-          .then((serverAnnotation) => {
-            // Update local annotation with server-assigned ID
-            if (serverAnnotation.id !== newAnnotation.id) {
-              setAnnotations((prev) =>
-                prev.map((a) =>
-                  a.id === newAnnotation.id
-                    ? { ...a, id: serverAnnotation.id }
-                    : a,
-                ),
-              );
-              // Also update the animated markers set
-              setAnimatedMarkers((prev) => {
-                const next = new Set(prev);
-                next.delete(newAnnotation.id);
-                next.add(serverAnnotation.id);
-                return next;
-              });
-            }
-          })
-          .catch((error) => {
-            console.warn("[Agentation] Failed to sync annotation:", error);
-          });
-      }
-    },
-    [
-      pendingAnnotation,
-      onAnnotationAdd,
-      fireWebhook,
-      endpoint,
-      currentSessionId,
-    ],
-  );
+    // Sync to server (non-blocking, but update local ID with server's ID)
+    if (props.endpoint && currentSessionId()) {
+      syncAnnotation(props.endpoint, currentSessionId()!, newAnnotation)
+        .then((serverAnnotation) => {
+          // Update local annotation with server-assigned ID
+          if (serverAnnotation.id !== newAnnotation.id) {
+            setAnnotations((prev) =>
+              prev.map((a) =>
+                a.id === newAnnotation.id
+                  ? { ...a, id: serverAnnotation.id }
+                  : a,
+              ),
+            );
+            // Also update the animated markers set
+            setAnimatedMarkers((prev) => {
+              const next = new Set(prev);
+              next.delete(newAnnotation.id);
+              next.add(serverAnnotation.id);
+              return next;
+            });
+          }
+        })
+        .catch((error) => {
+          console.warn("[Agentation] Failed to sync annotation:", error);
+        });
+    }
+  };
 
   // Cancel annotation with exit animation
-  const cancelAnnotation = useCallback(() => {
+  const cancelAnnotation = () => {
     setPendingExiting(true);
     originalSetTimeout(() => {
       setPendingAnnotation(null);
       setPendingExiting(false);
     }, 150); // Match exit animation duration
-  }, []);
+  };
 
   // Delete annotation with exit animation
-  const deleteAnnotation = useCallback(
-    (id: string) => {
-      const deletedIndex = annotations.findIndex((a) => a.id === id);
-      const deletedAnnotation = annotations[deletedIndex];
+  const deleteAnnotation = (id: string) => {
+    const anns = annotations();
+    const deletedIndex = anns.findIndex((a) => a.id === id);
+    const deletedAnnotation = anns[deletedIndex];
 
-      // Close edit panel with exit animation if deleting the annotation being edited
-      if (editingAnnotation?.id === id) {
-        setEditExiting(true);
-        originalSetTimeout(() => {
-          setEditingAnnotation(null);
-          setEditingTargetElement(null);
-          setEditingTargetElements([]);
-          setEditExiting(false);
-        }, 150);
-      }
-
-      setDeletingMarkerId(id);
-      setExitingMarkers((prev) => new Set(prev).add(id));
-
-      // Fire callback
-      if (deletedAnnotation) {
-        onAnnotationDelete?.(deletedAnnotation);
-        fireWebhook("annotation.delete", { annotation: deletedAnnotation });
-      }
-
-      // Sync delete to server (non-blocking)
-      if (endpoint) {
-        deleteAnnotationFromServer(endpoint, id).catch((error) => {
-          console.warn(
-            "[Agentation] Failed to delete annotation from server:",
-            error,
-          );
-        });
-      }
-
-      // Wait for exit animation then remove
+    // Close edit panel with exit animation if deleting the annotation being edited
+    if (editingAnnotation()?.id === id) {
+      setEditExiting(true);
       originalSetTimeout(() => {
-        setAnnotations((prev) => prev.filter((a) => a.id !== id));
-        setExitingMarkers((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        setDeletingMarkerId(null);
-
-        // Trigger renumber animation for markers after deleted one
-        if (deletedIndex < annotations.length - 1) {
-          setRenumberFrom(deletedIndex);
-          originalSetTimeout(() => setRenumberFrom(null), 200);
-        }
+        setEditingAnnotation(null);
+        setEditingTargetElement(null);
+        setEditingTargetElements([]);
+        setEditExiting(false);
       }, 150);
-    },
-    [annotations, editingAnnotation, onAnnotationDelete, fireWebhook, endpoint],
-  );
+    }
+
+    setDeletingMarkerId(id);
+    setExitingMarkers((prev) => new Set(prev).add(id));
+
+    // Fire callback
+    if (deletedAnnotation) {
+      props.onAnnotationDelete?.(deletedAnnotation);
+      fireWebhook("annotation.delete", { annotation: deletedAnnotation });
+    }
+
+    // Sync delete to server (non-blocking)
+    if (props.endpoint) {
+      deleteAnnotationFromServer(props.endpoint, id).catch((error) => {
+        console.warn(
+          "[Agentation] Failed to delete annotation from server:",
+          error,
+        );
+      });
+    }
+
+    // Wait for exit animation then remove
+    originalSetTimeout(() => {
+      setAnnotations((prev) => prev.filter((a) => a.id !== id));
+      setExitingMarkers((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setDeletingMarkerId(null);
+
+      // Trigger renumber animation for markers after deleted one
+      if (deletedIndex < anns.length - 1) {
+        setRenumberFrom(deletedIndex);
+        originalSetTimeout(() => setRenumberFrom(null), 200);
+      }
+    }, 150);
+  };
 
   // Start editing an annotation (right-click)
-  const startEditAnnotation = useCallback((annotation: Annotation) => {
+  const startEditAnnotation = (annotation: Annotation) => {
     setEditingAnnotation(annotation);
     setHoveredMarkerId(null);
     setHoveredTargetElement(null);
@@ -2217,112 +2185,96 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       setEditingTargetElement(null);
       setEditingTargetElements([]);
     }
-  }, []);
+  };
 
   // Handle marker hover - finds element(s) for live position tracking
-  const handleMarkerHover = useCallback(
-    (annotation: Annotation | null) => {
-      if (!annotation) {
-        setHoveredMarkerId(null);
-        setHoveredTargetElement(null);
-        setHoveredTargetElements([]);
-        return;
-      }
+  const handleMarkerHover = (annotation: Annotation | null) => {
+    if (!annotation) {
+      setHoveredMarkerId(null);
+      setHoveredTargetElement(null);
+      setHoveredTargetElements([]);
+      return;
+    }
 
-      setHoveredMarkerId(annotation.id);
+    setHoveredMarkerId(annotation.id);
 
-      // Find elements at the annotation's position(s) for live tracking
-      if (annotation.elementBoundingBoxes?.length) {
-        // Cmd+shift+click: find element at each bounding box center
-        const elements: HTMLElement[] = [];
-        for (const bb of annotation.elementBoundingBoxes) {
-          const centerX = bb.x + bb.width / 2;
-          const centerY = bb.y + bb.height / 2 - window.scrollY;
-          // Use elementsFromPoint to look through the marker if it's covering
-          const allEls = document.elementsFromPoint(centerX, centerY);
-          const el = allEls.find(
-            (e) => !e.closest('[data-annotation-marker]') && !e.closest('[data-agentation-root]'),
-          ) as HTMLElement | undefined;
-          if (el) elements.push(el);
-        }
-        setHoveredTargetElements(elements);
-        setHoveredTargetElement(null);
-      } else if (annotation.boundingBox) {
-        // Single element
-        const bb = annotation.boundingBox;
+    // Find elements at the annotation's position(s) for live tracking
+    if (annotation.elementBoundingBoxes?.length) {
+      // Cmd+shift+click: find element at each bounding box center
+      const elements: HTMLElement[] = [];
+      for (const bb of annotation.elementBoundingBoxes) {
         const centerX = bb.x + bb.width / 2;
-        const centerY = annotation.isFixed
-          ? bb.y + bb.height / 2
-          : bb.y + bb.height / 2 - window.scrollY;
-        const el = deepElementFromPoint(centerX, centerY);
+        const centerY = bb.y + bb.height / 2 - window.scrollY;
+        // Use elementsFromPoint to look through the marker if it's covering
+        const allEls = document.elementsFromPoint(centerX, centerY);
+        const el = allEls.find(
+          (e) => !e.closest('[data-annotation-marker]') && !e.closest('[data-agentation-root]'),
+        ) as HTMLElement | undefined;
+        if (el) elements.push(el);
+      }
+      setHoveredTargetElements(elements);
+      setHoveredTargetElement(null);
+    } else if (annotation.boundingBox) {
+      // Single element
+      const bb = annotation.boundingBox;
+      const centerX = bb.x + bb.width / 2;
+      const centerY = annotation.isFixed
+        ? bb.y + bb.height / 2
+        : bb.y + bb.height / 2 - window.scrollY;
+      const el = deepElementFromPoint(centerX, centerY);
 
-        // Validate found element's size roughly matches stored bounding box
-        // (prevents using wrong child element when clicking center of a container)
-        if (el) {
-          const elRect = el.getBoundingClientRect();
-          const widthRatio = elRect.width / bb.width;
-          const heightRatio = elRect.height / bb.height;
-          // If found element is much smaller than stored, it's probably a child - don't use it
-          if (widthRatio < 0.5 || heightRatio < 0.5) {
-            setHoveredTargetElement(null);
-          } else {
-            setHoveredTargetElement(el);
-          }
-        } else {
+      // Validate found element's size roughly matches stored bounding box
+      // (prevents using wrong child element when clicking center of a container)
+      if (el) {
+        const elRect = el.getBoundingClientRect();
+        const widthRatio = elRect.width / bb.width;
+        const heightRatio = elRect.height / bb.height;
+        // If found element is much smaller than stored, it's probably a child - don't use it
+        if (widthRatio < 0.5 || heightRatio < 0.5) {
           setHoveredTargetElement(null);
+        } else {
+          setHoveredTargetElement(el);
         }
-        setHoveredTargetElements([]);
       } else {
         setHoveredTargetElement(null);
-        setHoveredTargetElements([]);
       }
-    },
-    [],
-  );
+      setHoveredTargetElements([]);
+    } else {
+      setHoveredTargetElement(null);
+      setHoveredTargetElements([]);
+    }
+  };
 
   // Update annotation (edit mode submit)
-  const updateAnnotation = useCallback(
-    (newComment: string) => {
-      if (!editingAnnotation) return;
+  const updateAnnotation = (newComment: string) => {
+    const editing = editingAnnotation();
+    if (!editing) return;
 
-      const updatedAnnotation = { ...editingAnnotation, comment: newComment };
+    const updatedAnnotation = { ...editing, comment: newComment };
 
-      setAnnotations((prev) =>
-        prev.map((a) =>
-          a.id === editingAnnotation.id ? updatedAnnotation : a,
-        ),
-      );
+    setAnnotations((prev) =>
+      prev.map((a) =>
+        a.id === editing.id ? updatedAnnotation : a,
+      ),
+    );
 
-      // Fire callback
-      onAnnotationUpdate?.(updatedAnnotation);
-      fireWebhook("annotation.update", { annotation: updatedAnnotation });
+    // Fire callback
+    props.onAnnotationUpdate?.(updatedAnnotation);
+    fireWebhook("annotation.update", { annotation: updatedAnnotation });
 
-      // Sync update to server (non-blocking)
-      if (endpoint) {
-        updateAnnotationOnServer(endpoint, editingAnnotation.id, {
-          comment: newComment,
-        }).catch((error) => {
-          console.warn(
-            "[Agentation] Failed to update annotation on server:",
-            error,
-          );
-        });
-      }
+    // Sync update to server (non-blocking)
+    if (props.endpoint) {
+      updateAnnotationOnServer(props.endpoint, editing.id, {
+        comment: newComment,
+      }).catch((error) => {
+        console.warn(
+          "[Agentation] Failed to update annotation on server:",
+          error,
+        );
+      });
+    }
 
-      // Animate out the edit popup
-      setEditExiting(true);
-      originalSetTimeout(() => {
-        setEditingAnnotation(null);
-        setEditingTargetElement(null);
-        setEditingTargetElements([]);
-        setEditExiting(false);
-      }, 150);
-    },
-    [editingAnnotation, onAnnotationUpdate, fireWebhook, endpoint],
-  );
-
-  // Cancel editing with exit animation
-  const cancelEditAnnotation = useCallback(() => {
+    // Animate out the edit popup
     setEditExiting(true);
     originalSetTimeout(() => {
       setEditingAnnotation(null);
@@ -2330,22 +2282,34 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       setEditingTargetElements([]);
       setEditExiting(false);
     }, 150);
-  }, []);
+  };
+
+  // Cancel editing with exit animation
+  const cancelEditAnnotation = () => {
+    setEditExiting(true);
+    originalSetTimeout(() => {
+      setEditingAnnotation(null);
+      setEditingTargetElement(null);
+      setEditingTargetElements([]);
+      setEditExiting(false);
+    }, 150);
+  };
 
   // Clear all with staggered animation
-  const clearAll = useCallback(() => {
-    const count = annotations.length;
+  const clearAll = () => {
+    const anns = annotations();
+    const count = anns.length;
     if (count === 0) return;
 
     // Fire callback with all annotations before clearing
-    onAnnotationsClear?.(annotations);
-    fireWebhook("annotations.clear", { annotations });
+    props.onAnnotationsClear?.(anns);
+    fireWebhook("annotations.clear", { annotations: anns });
 
     // Sync deletions to server (non-blocking)
-    if (endpoint) {
+    if (props.endpoint) {
       Promise.all(
-        annotations.map((a) =>
-          deleteAnnotationFromServer(endpoint, a.id).catch((error) => {
+        anns.map((a) =>
+          deleteAnnotationFromServer(props.endpoint!, a.id).catch((error) => {
             console.warn(
               "[Agentation] Failed to delete annotation from server:",
               error,
@@ -2361,16 +2325,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     const totalAnimationTime = count * 30 + 200;
     originalSetTimeout(() => {
       setAnnotations([]);
-      setAnimatedMarkers(new Set()); // Reset animated markers
+      setAnimatedMarkers(new Set<string>()); // Reset animated markers
       localStorage.removeItem(getStorageKey(pathname));
       setIsClearing(false);
     }, totalAnimationTime);
 
     originalSetTimeout(() => setCleared(false), 1500);
-  }, [pathname, annotations, onAnnotationsClear, fireWebhook, endpoint]);
+  };
 
   // Copy output
-  const copyOutput = useCallback(async () => {
+  const copyOutput = async () => {
     const displayUrl =
       typeof window !== "undefined"
         ? window.location.pathname +
@@ -2378,13 +2342,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           window.location.hash
         : pathname;
     const output = generateOutput(
-      annotations,
+      annotations(),
       displayUrl,
-      settings.outputDetail,
+      settings().outputDetail,
     );
     if (!output) return;
 
-    if (copyToClipboard) {
+    if (props.copyToClipboard !== false) {
       try {
         await navigator.clipboard.writeText(output);
       } catch {
@@ -2393,27 +2357,18 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     }
 
     // Fire callback with markdown output (always, regardless of clipboard success)
-    onCopy?.(output);
+    props.onCopy?.(output);
 
     setCopied(true);
     originalSetTimeout(() => setCopied(false), 2000);
 
-    if (settings.autoClearAfterCopy) {
+    if (settings().autoClearAfterCopy) {
       originalSetTimeout(() => clearAll(), 500);
     }
-  }, [
-    annotations,
-    pathname,
-    settings.outputDetail,
-    effectiveReactMode,
-    settings.autoClearAfterCopy,
-    clearAll,
-    copyToClipboard,
-    onCopy,
-  ]);
+  };
 
   // Send to webhook
-  const sendToWebhook = useCallback(async () => {
+  const sendToWebhook = async () => {
     const displayUrl =
       typeof window !== "undefined"
         ? window.location.pathname +
@@ -2421,15 +2376,15 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           window.location.hash
         : pathname;
     const output = generateOutput(
-      annotations,
+      annotations(),
       displayUrl,
-      settings.outputDetail,
+      settings().outputDetail,
     );
     if (!output) return;
 
     // Fire onSubmit callback
-    if (onSubmit) {
-      onSubmit(output, annotations);
+    if (props.onSubmit) {
+      props.onSubmit(output, annotations());
     }
 
     // Start sending (arrow fades)
@@ -2439,47 +2394,39 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     await new Promise((resolve) => originalSetTimeout(resolve, 150));
 
     // Fire webhook and check result (force=true to bypass webhooksEnabled check for manual sends)
-    const success = await fireWebhook("submit", { output, annotations }, true);
+    const success = await fireWebhook("submit", { output, annotations: annotations() }, true);
 
     // Show result
     setSendState(success ? "sent" : "failed");
     originalSetTimeout(() => setSendState("idle"), 2500);
 
     // Clear annotations if send succeeded and autoClearAfterCopy is enabled
-    if (success && settings.autoClearAfterCopy) {
+    if (success && settings().autoClearAfterCopy) {
       originalSetTimeout(() => clearAll(), 500);
     }
-  }, [
-    onSubmit,
-    fireWebhook,
-    annotations,
-    pathname,
-    settings.outputDetail,
-    effectiveReactMode,
-    settings.autoClearAfterCopy,
-    clearAll,
-  ]);
+  };
 
   // Toolbar dragging - mousemove and mouseup
-  useEffect(() => {
-    if (!dragStartPos) return;
+  createEffect(() => {
+    const dsp = dragStartPos();
+    if (!dsp) return;
 
-    const DRAG_THRESHOLD = 10; // pixels
+    const TOOLBAR_DRAG_THRESHOLD = 10; // pixels
 
     const handleMouseMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - dragStartPos.x;
-      const deltaY = e.clientY - dragStartPos.y;
+      const deltaX = e.clientX - dsp.x;
+      const deltaY = e.clientY - dsp.y;
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
       // Start dragging once threshold is exceeded
-      if (!isDraggingToolbar && distance > DRAG_THRESHOLD) {
+      if (!isDraggingToolbar() && distance > TOOLBAR_DRAG_THRESHOLD) {
         setIsDraggingToolbar(true);
       }
 
-      if (isDraggingToolbar || distance > DRAG_THRESHOLD) {
+      if (isDraggingToolbar() || distance > TOOLBAR_DRAG_THRESHOLD) {
         // Calculate new position
-        let newX = dragStartPos.toolbarX + deltaX;
-        let newY = dragStartPos.toolbarY + deltaY;
+        let newX = dsp.toolbarX + deltaX;
+        let newY = dsp.toolbarY + deltaY;
 
         // Constrain to viewport
         const padding = 20;
@@ -2488,8 +2435,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
         // Content is right-aligned within wrapper via margin-left: auto
         // Calculate content width based on state
-        const contentWidth = isActive
-          ? connectionStatus === "connected"
+        const contentWidth = isActive()
+          ? connectionStatus() === "connected"
             ? 297
             : 257
           : 44; // collapsed circle
@@ -2514,8 +2461,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     const handleMouseUp = () => {
       // If we were actually dragging, set flag to prevent click event
-      if (isDraggingToolbar) {
-        justFinishedToolbarDragRef.current = true;
+      if (isDraggingToolbar()) {
+        justFinishedToolbarDragRef = true;
       }
       setIsDraggingToolbar(false);
       setDragStartPos(null);
@@ -2524,60 +2471,59 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
 
-    return () => {
+    onCleanup(() => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [dragStartPos, isDraggingToolbar, isActive, connectionStatus]);
+    });
+  });
 
   // Handle toolbar drag start
-  const handleToolbarMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      // Only drag when clicking the toolbar background (not buttons or settings)
-      if (
-        (e.target as HTMLElement).closest("button") ||
-        (e.target as HTMLElement).closest('[data-agentation-settings-panel]')
-      ) {
-        return;
-      }
+  const handleToolbarMouseDown = (e: MouseEvent) => {
+    // Only drag when clicking the toolbar background (not buttons or settings)
+    if (
+      (e.target as HTMLElement).closest("button") ||
+      (e.target as HTMLElement).closest('[data-agentation-settings-panel]')
+    ) {
+      return;
+    }
 
-      // Don't prevent default yet - let onClick work for collapsed state
+    // Don't prevent default yet - let onClick work for collapsed state
 
-      // Get toolbar parent's actual current position (toolbarPosition is applied to parent)
-      const toolbarParent = (e.currentTarget as HTMLElement).parentElement;
-      if (!toolbarParent) return;
+    // Get toolbar parent's actual current position (toolbarPosition is applied to parent)
+    const toolbarParent = (e.currentTarget as HTMLElement).parentElement;
+    if (!toolbarParent) return;
 
-      const rect = toolbarParent.getBoundingClientRect();
-      const currentX = toolbarPosition?.x ?? rect.left;
-      const currentY = toolbarPosition?.y ?? rect.top;
+    const rect = toolbarParent.getBoundingClientRect();
+    const pos = toolbarPosition();
+    const currentX = pos?.x ?? rect.left;
+    const currentY = pos?.y ?? rect.top;
 
-      setDragStartPos({
-        x: e.clientX,
-        y: e.clientY,
-        toolbarX: currentX,
-        toolbarY: currentY,
-      });
-      // Don't set isDraggingToolbar yet - wait for actual movement
-    },
-    [toolbarPosition],
-  );
+    setDragStartPos({
+      x: e.clientX,
+      y: e.clientY,
+      toolbarX: currentX,
+      toolbarY: currentY,
+    });
+    // Don't set isDraggingToolbar yet - wait for actual movement
+  };
 
   // Keep toolbar in view on window resize and when toolbar expands/collapses
-  useEffect(() => {
-    if (!toolbarPosition) return;
+  createEffect(() => {
+    const pos = toolbarPosition();
+    if (!pos) return;
 
     const constrainPosition = () => {
       const padding = 20;
       const wrapperWidth = 297; // .toolbar wrapper width
       const toolbarHeight = 44;
 
-      let newX = toolbarPosition.x;
-      let newY = toolbarPosition.y;
+      let newX = pos.x;
+      let newY = pos.y;
 
       // Content is right-aligned within wrapper via margin-left: auto
       // Calculate content width based on state
-      const contentWidth = isActive
-        ? connectionStatus === "connected"
+      const contentWidth = isActive()
+        ? connectionStatus() === "connected"
           ? 297
           : 257
         : 44; // collapsed circle
@@ -2597,7 +2543,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       );
 
       // Only update if position changed
-      if (newX !== toolbarPosition.x || newY !== toolbarPosition.y) {
+      if (newX !== pos.x || newY !== pos.y) {
         setToolbarPosition({ x: newX, y: newY });
       }
     };
@@ -2606,11 +2552,18 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     constrainPosition();
 
     window.addEventListener("resize", constrainPosition);
-    return () => window.removeEventListener("resize", constrainPosition);
-  }, [toolbarPosition, isActive, connectionStatus]);
+    onCleanup(() => window.removeEventListener("resize", constrainPosition));
+  });
 
   // Keyboard shortcuts
-  useEffect(() => {
+  createEffect(() => {
+    // Track reactive deps
+    const active = isActive();
+    const pending = pendingAnnotation();
+    const annsLength = annotations().length;
+    const sett = settings();
+    const sState = sendState();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts when typing in inputs
       const target = e.target as HTMLElement;
@@ -2621,13 +2574,13 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       if (e.key === "Escape") {
         // Clear multi-select if active
-        if (pendingMultiSelectElements.length > 0) {
+        if (pendingMultiSelectElements().length > 0) {
           setPendingMultiSelectElements([]);
           return;
         }
-        if (pendingAnnotation) {
+        if (pending) {
           // Let popup handle
-        } else if (isActive) {
+        } else if (active) {
           hideTooltipsUntilMouseLeave();
           setIsActive(false);
         }
@@ -2653,7 +2606,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       // "H" to toggle marker visibility
       if (e.key === "h" || e.key === "H") {
-        if (annotations.length > 0) {
+        if (annsLength > 0) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
           setShowMarkers((prev) => !prev);
@@ -2662,7 +2615,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       // "C" to copy output
       if (e.key === "c" || e.key === "C") {
-        if (annotations.length > 0) {
+        if (annsLength > 0) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
           copyOutput();
@@ -2671,7 +2624,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
       // "X" to clear all
       if (e.key === "x" || e.key === "X") {
-        if (annotations.length > 0) {
+        if (annsLength > 0) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
           clearAll();
@@ -2681,11 +2634,11 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       // "S" to send annotations
       if (e.key === "s" || e.key === "S") {
         const hasValidWebhook =
-          isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "");
+          isValidUrl(sett.webhookUrl) || isValidUrl(props.webhookUrl || "");
         if (
-          annotations.length > 0 &&
+          annsLength > 0 &&
           hasValidWebhook &&
-          sendState === "idle"
+          sState === "idle"
         ) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
@@ -2695,37 +2648,21 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [
-    isActive,
-    pendingAnnotation,
-    annotations.length,
-    settings.webhookUrl,
-    webhookUrl,
-    sendState,
-    sendToWebhook,
-    toggleFreeze,
-    copyOutput,
-    clearAll,
-    pendingMultiSelectElements,
-  ]);
+    onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+  });
 
-  if (!mounted) return null;
-  if (isToolbarHidden) return null;
-
-  const hasAnnotations = annotations.length > 0;
+  const hasAnnotations = () => annotations().length > 0;
 
   // Filter annotations for rendering (exclude exiting ones from normal flow)
-  const visibleAnnotations = annotations.filter(
-    (a) => !exitingMarkers.has(a.id) && isRenderableAnnotation(a),
+  const visibleAnnotations = () => annotations().filter(
+    (a) => !exitingMarkers().has(a.id) && isRenderableAnnotation(a),
   );
-  const exitingAnnotationsList = annotations.filter((a) =>
-    exitingMarkers.has(a.id),
+  const exitingAnnotationsList = () => annotations().filter((a) =>
+    exitingMarkers().has(a.id),
   );
 
   // Helper function to calculate viewport-aware tooltip positioning
-  // Helper function to calculate viewport-aware tooltip positioning
-  const getTooltipPosition = (annotation: Annotation): React.CSSProperties => {
+  const getTooltipPosition = (annotation: Annotation): JSX.CSSProperties => {
     // Tooltip dimensions (from CSS)
     const tooltipMaxWidth = 200;
     const tooltipEstimatedHeight = 80; // Estimated max height
@@ -2739,14 +2676,14 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         ? parseFloat(annotation.y)
         : annotation.y;
 
-    const styles: React.CSSProperties = {};
+    const result: JSX.CSSProperties = {};
 
     // Vertical positioning: flip if near bottom
     const spaceBelow = window.innerHeight - markerY - markerSize - gap;
     if (spaceBelow < tooltipEstimatedHeight) {
       // Show above marker
-      styles.top = "auto";
-      styles.bottom = `calc(100% + ${gap}px)`;
+      result.top = "auto";
+      result.bottom = `calc(100% + ${gap}px)`;
     }
     // If enough space below, use default CSS (top: calc(100% + 10px))
 
@@ -2757,793 +2694,831 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     if (centerX < edgePadding) {
       // Too close to left edge
       const offset = edgePadding - centerX;
-      styles.left = `calc(50% + ${offset}px)`;
+      result.left = `calc(50% + ${offset}px)`;
     } else if (centerX + tooltipMaxWidth > window.innerWidth - edgePadding) {
       // Too close to right edge
       const overflow =
         centerX + tooltipMaxWidth - (window.innerWidth - edgePadding);
-      styles.left = `calc(50% - ${overflow}px)`;
+      result.left = `calc(50% - ${overflow}px)`;
     }
     // If centered position is fine, use default CSS (left: 50%)
 
-    return styles;
+    return result;
   };
 
-  return createPortal(
-    <div ref={portalWrapperRef} style={{ display: "contents" }} data-agentation-theme={isDarkMode ? "dark" : "light"} data-agentation-accent={settings.annotationColorId} data-agentation-root="">
-      {/* Toolbar */}
-      <div
-        className={`${styles.toolbar}${userClassName ? ` ${userClassName}` : ""}`}
-        data-feedback-toolbar
-        style={
-          toolbarPosition
-            ? {
-                left: toolbarPosition.x,
-                top: toolbarPosition.y,
-                right: "auto",
-                bottom: "auto",
+  return (
+    <Show when={mounted() && !isToolbarHidden()}>
+      <Portal mount={document.body}>
+        <div ref={(el) => portalWrapperRef = el} style={{ display: "contents" }} data-agentation-theme={isDarkMode() ? "dark" : "light"} data-agentation-accent={settings().annotationColorId} data-agentation-root="">
+          {/* Toolbar */}
+          <div
+            class={`${styles.toolbar}${props.class ? ` ${props.class}` : ""}`}
+            data-feedback-toolbar
+            style={
+              toolbarPosition()
+                ? {
+                    left: `${toolbarPosition()!.x}px`,
+                    top: `${toolbarPosition()!.y}px`,
+                    right: "auto",
+                    bottom: "auto",
+                  }
+                : undefined
+            }
+          >
+            {/* Morphing container */}
+            <div
+              class={`${styles.toolbarContainer} ${isActive() ? styles.expanded : styles.collapsed} ${showEntranceAnimation() ? styles.entrance : ""} ${isToolbarHiding() ? styles.hiding : ""} ${!settings().webhooksEnabled && (isValidUrl(settings().webhookUrl) || isValidUrl(props.webhookUrl || "")) ? styles.serverConnected : ""}`}
+              onClick={
+                !isActive()
+                  ? (e: MouseEvent) => {
+                      // Don't activate if we just finished dragging
+                      if (justFinishedToolbarDragRef) {
+                        justFinishedToolbarDragRef = false;
+                        e.preventDefault();
+                        return;
+                      }
+                      setIsActive(true);
+                    }
+                  : undefined
               }
-            : undefined
-        }
-      >
-        {/* Morphing container */}
-        <div
-          className={`${styles.toolbarContainer} ${isActive ? styles.expanded : styles.collapsed} ${showEntranceAnimation ? styles.entrance : ""} ${isToolbarHiding ? styles.hiding : ""} ${!settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.serverConnected : ""}`}
-          onClick={
-            !isActive
-              ? (e) => {
-                  // Don't activate if we just finished dragging
-                  if (justFinishedToolbarDragRef.current) {
-                    justFinishedToolbarDragRef.current = false;
-                    e.preventDefault();
-                    return;
-                  }
-                  setIsActive(true);
-                }
-              : undefined
-          }
-          onMouseDown={handleToolbarMouseDown}
-          role={!isActive ? "button" : undefined}
-          tabIndex={!isActive ? 0 : -1}
-          title={!isActive ? "Start feedback mode" : undefined}
-        >
-          {/* Toggle content - visible when collapsed */}
-          <div
-            className={`${styles.toggleContent} ${!isActive ? styles.visible : styles.hidden}`}
-          >
-            <IconListSparkle size={24} />
-            {hasAnnotations && (
-              <span
-                className={`${styles.badge} ${isActive ? styles.fadeOut : ""} ${showEntranceAnimation ? styles.entrance : ""}`}
-              >
-                {annotations.length}
-              </span>
-            )}
-          </div>
-
-          {/* Controls content - visible when expanded */}
-          <div
-            className={`${styles.controlsContent} ${isActive ? styles.visible : styles.hidden} ${
-              toolbarPosition && toolbarPosition.y < 100
-                ? styles.tooltipBelow
-                : ""
-            } ${tooltipsHidden || showSettings ? styles.tooltipsHidden : ""} ${tooltipSessionActive ? styles.tooltipsInSession : ""}`}
-            onMouseEnter={handleControlsMouseEnter}
-            onMouseLeave={handleControlsMouseLeave}
-          >
-            <div
-              className={`${styles.buttonWrapper} ${
-                toolbarPosition && toolbarPosition.x < 120
-                  ? styles.buttonWrapperAlignLeft
-                  : ""
-              }`}
+              onMouseDown={handleToolbarMouseDown}
+              role={!isActive() ? "button" : undefined}
+              tabIndex={!isActive() ? 0 : -1}
+              title={!isActive() ? "Start feedback mode" : undefined}
             >
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  toggleFreeze();
-                }}
-                data-active={isFrozen}
-              >
-                <IconPausePlayAnimated size={24} isPaused={isFrozen} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {isFrozen ? "Resume animations" : "Pause animations"}
-                <span className={styles.shortcut}>P</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  setShowMarkers(!showMarkers);
-                }}
-                disabled={!hasAnnotations}
-              >
-                <IconEyeAnimated size={24} isOpen={showMarkers} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {showMarkers ? "Hide markers" : "Show markers"}
-                <span className={styles.shortcut}>H</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={`${styles.controlButton} ${copied ? styles.statusShowing : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  copyOutput();
-                }}
-                disabled={!hasAnnotations}
-                data-active={copied}
-              >
-                <IconCopyAnimated size={24} copied={copied} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                Copy feedback
-                <span className={styles.shortcut}>C</span>
-              </span>
-            </div>
-
-            {/* Send button - only visible when webhook URL is available AND auto-send is off */}
-            <div
-              className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${isActive && !settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.sendButtonVisible : ""}`}
-            >
-              <button
-                className={`${styles.controlButton} ${sendState === "sent" || sendState === "failed" ? styles.statusShowing : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  sendToWebhook();
-                }}
-                disabled={
-                  !hasAnnotations ||
-                  (!isValidUrl(settings.webhookUrl) &&
-                    !isValidUrl(webhookUrl || "")) ||
-                  sendState === "sending"
-                }
-                data-no-hover={sendState === "sent" || sendState === "failed"}
-                tabIndex={
-                  isValidUrl(settings.webhookUrl) ||
-                  isValidUrl(webhookUrl || "")
-                    ? 0
-                    : -1
-                }
-              >
-                <IconSendArrow size={24} state={sendState} />
-                {hasAnnotations && sendState === "idle" && (
-                  <span
-                    className={styles.buttonBadge}
-                  >
-                    {annotations.length}
-                  </span>
-                )}
-              </button>
-              <span className={styles.buttonTooltip}>
-                Send Annotations
-                <span className={styles.shortcut}>S</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  clearAll();
-                }}
-                disabled={!hasAnnotations}
-                data-danger
-              >
-                <IconTrashAlt size={24} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                Clear all
-                <span className={styles.shortcut}>X</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  setShowSettings(!showSettings);
-                }}
-              >
-                <IconGear size={24} />
-              </button>
-              {endpoint && connectionStatus !== "disconnected" && (
-                <span
-                  className={`${styles.mcpIndicator} ${styles[connectionStatus]} ${showSettings ? styles.hidden : ""}`}
-                  title={
-                    connectionStatus === "connected"
-                      ? "MCP Connected"
-                      : "MCP Connecting..."
-                  }
-                />
-              )}
-              <span className={styles.buttonTooltip}>Settings</span>
-            </div>
-
-            <div
-              className={styles.divider}
-            />
-
-            <div
-              className={`${styles.buttonWrapper} ${
-                toolbarPosition &&
-                typeof window !== "undefined" &&
-                toolbarPosition.x > window.innerWidth - 120
-                  ? styles.buttonWrapperAlignRight
-                  : ""
-              }`}
-            >
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  setIsActive(false);
-                }}
-              >
-                <IconXmarkLarge size={24} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                Exit
-                <span className={styles.shortcut}>Esc</span>
-              </span>
-            </div>
-          </div>
-          <SettingsPanel
-            settings={settings}
-            onSettingsChange={(patch) => setSettings((s) => ({ ...s, ...patch }))}
-            isDarkMode={isDarkMode}
-            onToggleTheme={toggleTheme}
-            isDevMode={isDevMode}
-            connectionStatus={connectionStatus}
-            endpoint={endpoint}
-            isVisible={showSettingsVisible}
-            toolbarNearBottom={!!toolbarPosition && toolbarPosition.y < 230}
-            settingsPage={settingsPage}
-            onSettingsPageChange={setSettingsPage}
-            onHideToolbar={hideToolbarTemporarily}
-          />
-        </div>
-      </div>
-
-      {/* Markers layer - normal scrolling markers */}
-      <div className={styles.markersLayer} data-feedback-toolbar>
-        {markersVisible &&
-          visibleAnnotations
-            .filter((a) => !a.isFixed)
-            .map((annotation, layerIndex, arr) => (
-              <AnnotationMarker
-                key={annotation.id}
-                annotation={annotation}
-                globalIndex={annotations.findIndex((a) => a.id === annotation.id)}
-                layerIndex={layerIndex}
-                layerSize={arr.length}
-                isExiting={markersExiting}
-                isClearing={isClearing}
-                isAnimated={animatedMarkers.has(annotation.id)}
-                isHovered={!markersExiting && hoveredMarkerId === annotation.id}
-                isDeleting={deletingMarkerId === annotation.id}
-                isEditingAny={!!editingAnnotation}
-                renumberFrom={renumberFrom}
-                markerClickBehavior={settings.markerClickBehavior}
-                tooltipStyle={getTooltipPosition(annotation)}
-                onHoverEnter={(a) =>
-                  !markersExiting &&
-                  a.id !== recentlyAddedIdRef.current &&
-                  handleMarkerHover(a)
-                }
-                onHoverLeave={() => handleMarkerHover(null)}
-                onClick={(a) =>
-                  settings.markerClickBehavior === "delete"
-                    ? deleteAnnotation(a.id)
-                    : startEditAnnotation(a)
-                }
-                onContextMenu={startEditAnnotation}
-              />
-            ))}
-        {markersVisible &&
-          !markersExiting &&
-          exitingAnnotationsList
-            .filter((a) => !a.isFixed)
-            .map((a) => <ExitingMarker key={a.id} annotation={a} />)}
-      </div>
-
-      {/* Fixed markers layer */}
-      <div className={styles.fixedMarkersLayer} data-feedback-toolbar>
-        {markersVisible &&
-          visibleAnnotations
-            .filter((a) => a.isFixed)
-            .map((annotation, layerIndex, arr) => (
-              <AnnotationMarker
-                key={annotation.id}
-                annotation={annotation}
-                globalIndex={annotations.findIndex((a) => a.id === annotation.id)}
-                layerIndex={layerIndex}
-                layerSize={arr.length}
-                isExiting={markersExiting}
-                isClearing={isClearing}
-                isAnimated={animatedMarkers.has(annotation.id)}
-                isHovered={!markersExiting && hoveredMarkerId === annotation.id}
-                isDeleting={deletingMarkerId === annotation.id}
-                isEditingAny={!!editingAnnotation}
-                renumberFrom={renumberFrom}
-                markerClickBehavior={settings.markerClickBehavior}
-                tooltipStyle={getTooltipPosition(annotation)}
-                onHoverEnter={(a) =>
-                  !markersExiting &&
-                  a.id !== recentlyAddedIdRef.current &&
-                  handleMarkerHover(a)
-                }
-                onHoverLeave={() => handleMarkerHover(null)}
-                onClick={(a) =>
-                  settings.markerClickBehavior === "delete"
-                    ? deleteAnnotation(a.id)
-                    : startEditAnnotation(a)
-                }
-                onContextMenu={startEditAnnotation}
-              />
-            ))}
-        {markersVisible &&
-          !markersExiting &&
-          exitingAnnotationsList
-            .filter((a) => a.isFixed)
-            .map((a) => <ExitingMarker key={a.id} annotation={a} fixed />)}
-      </div>
-
-
-      {/* Interactive overlay */}
-      {isActive && (
-        <div
-          className={styles.overlay}
-          data-feedback-toolbar
-          style={
-            pendingAnnotation || editingAnnotation
-              ? { zIndex: 99999 }
-              : undefined
-          }
-        >
-          {/* Hover highlight */}
-          {hoverInfo?.rect &&
-            !pendingAnnotation &&
-            !isScrolling &&
-            !isDragging && (
+              {/* Toggle content - visible when collapsed */}
               <div
-                className={`${styles.hoverHighlight} ${styles.enter}`}
-                style={{
-                  left: hoverInfo.rect.left,
-                  top: hoverInfo.rect.top,
-                  width: hoverInfo.rect.width,
-                  height: hoverInfo.rect.height,
-                  borderColor: "color-mix(in srgb, var(--agentation-color-accent) 50%, transparent)",
-                  backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 4%, transparent)",
-                }}
-              />
-            )}
+                class={`${styles.toggleContent} ${!isActive() ? styles.visible : styles.hidden}`}
+              >
+                <IconListSparkle size={24} />
+                <Show when={hasAnnotations()}>
+                  <span
+                    class={`${styles.badge} ${isActive() ? styles.fadeOut : ""} ${showEntranceAnimation() ? styles.entrance : ""}`}
+                  >
+                    {annotations().length}
+                  </span>
+                </Show>
+              </div>
 
-          {/* Cmd+shift+click multi-select highlights (during selection, before releasing modifiers) */}
-          {pendingMultiSelectElements
-            .filter((item) => document.contains(item.element))
-            .map((item, index) => {
-              const rect = item.element.getBoundingClientRect();
-              // Only show green if 2+ elements selected, otherwise use default blue
-              const isMulti = pendingMultiSelectElements.length > 1;
-              return (
+              {/* Controls content - visible when expanded */}
+              <div
+                class={`${styles.controlsContent} ${isActive() ? styles.visible : styles.hidden} ${
+                  toolbarPosition() && toolbarPosition()!.y < 100
+                    ? styles.tooltipBelow
+                    : ""
+                } ${tooltipsHidden() || showSettings() ? styles.tooltipsHidden : ""} ${tooltipSessionActive() ? styles.tooltipsInSession : ""}`}
+                onMouseEnter={handleControlsMouseEnter}
+                onMouseLeave={handleControlsMouseLeave}
+              >
                 <div
-                  key={index}
-                  className={
-                    isMulti
-                      ? styles.multiSelectOutline
-                      : styles.singleSelectOutline
-                  }
-                  style={{
-                    position: "fixed",
-                    left: rect.left,
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                    ...(isMulti
-                      ? {}
-                      : {
-                          borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                          backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                        }),
-                  }}
+                  class={`${styles.buttonWrapper} ${
+                    toolbarPosition() && toolbarPosition()!.x < 120
+                      ? styles.buttonWrapperAlignLeft
+                      : ""
+                  }`}
+                >
+                  <button
+                    class={styles.controlButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      toggleFreeze();
+                    }}
+                    data-active={isFrozen()}
+                  >
+                    <IconPausePlayAnimated size={24} isPaused={isFrozen()} />
+                  </button>
+                  <span class={styles.buttonTooltip}>
+                    {isFrozen() ? "Resume animations" : "Pause animations"}
+                    <span class={styles.shortcut}>P</span>
+                  </span>
+                </div>
+
+                <div class={styles.buttonWrapper}>
+                  <button
+                    class={styles.controlButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      setShowMarkers(!showMarkers());
+                    }}
+                    disabled={!hasAnnotations()}
+                  >
+                    <IconEyeAnimated size={24} isOpen={showMarkers()} />
+                  </button>
+                  <span class={styles.buttonTooltip}>
+                    {showMarkers() ? "Hide markers" : "Show markers"}
+                    <span class={styles.shortcut}>H</span>
+                  </span>
+                </div>
+
+                <div class={styles.buttonWrapper}>
+                  <button
+                    class={`${styles.controlButton} ${copied() ? styles.statusShowing : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      copyOutput();
+                    }}
+                    disabled={!hasAnnotations()}
+                    data-active={copied()}
+                  >
+                    <IconCopyAnimated size={24} copied={copied()} />
+                  </button>
+                  <span class={styles.buttonTooltip}>
+                    Copy feedback
+                    <span class={styles.shortcut}>C</span>
+                  </span>
+                </div>
+
+                {/* Send button - only visible when webhook URL is available AND auto-send is off */}
+                <div
+                  class={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${isActive() && !settings().webhooksEnabled && (isValidUrl(settings().webhookUrl) || isValidUrl(props.webhookUrl || "")) ? styles.sendButtonVisible : ""}`}
+                >
+                  <button
+                    class={`${styles.controlButton} ${sendState() === "sent" || sendState() === "failed" ? styles.statusShowing : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      sendToWebhook();
+                    }}
+                    disabled={
+                      !hasAnnotations() ||
+                      (!isValidUrl(settings().webhookUrl) &&
+                        !isValidUrl(props.webhookUrl || "")) ||
+                      sendState() === "sending"
+                    }
+                    data-no-hover={sendState() === "sent" || sendState() === "failed"}
+                    tabIndex={
+                      isValidUrl(settings().webhookUrl) ||
+                      isValidUrl(props.webhookUrl || "")
+                        ? 0
+                        : -1
+                    }
+                  >
+                    <IconSendArrow size={24} state={sendState()} />
+                    <Show when={hasAnnotations() && sendState() === "idle"}>
+                      <span
+                        class={styles.buttonBadge}
+                      >
+                        {annotations().length}
+                      </span>
+                    </Show>
+                  </button>
+                  <span class={styles.buttonTooltip}>
+                    Send Annotations
+                    <span class={styles.shortcut}>S</span>
+                  </span>
+                </div>
+
+                <div class={styles.buttonWrapper}>
+                  <button
+                    class={styles.controlButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      clearAll();
+                    }}
+                    disabled={!hasAnnotations()}
+                    data-danger
+                  >
+                    <IconTrashAlt size={24} />
+                  </button>
+                  <span class={styles.buttonTooltip}>
+                    Clear all
+                    <span class={styles.shortcut}>X</span>
+                  </span>
+                </div>
+
+                <div class={styles.buttonWrapper}>
+                  <button
+                    class={styles.controlButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      setShowSettings(!showSettings());
+                    }}
+                  >
+                    <IconGear size={24} />
+                  </button>
+                  <Show when={props.endpoint && connectionStatus() !== "disconnected"}>
+                    <span
+                      class={`${styles.mcpIndicator} ${styles[connectionStatus()]} ${showSettings() ? styles.hidden : ""}`}
+                      title={
+                        connectionStatus() === "connected"
+                          ? "MCP Connected"
+                          : "MCP Connecting..."
+                      }
+                    />
+                  </Show>
+                  <span class={styles.buttonTooltip}>Settings</span>
+                </div>
+
+                <div
+                  class={styles.divider}
                 />
-              );
-            })}
 
-          {/* Marker hover outline (shows bounding box of hovered annotation) */}
-          {hoveredMarkerId &&
-            !pendingAnnotation &&
-            (() => {
-              const hoveredAnnotation = annotations.find(
-                (a) => a.id === hoveredMarkerId,
-              );
-              if (!hoveredAnnotation?.boundingBox) return null;
+                <div
+                  class={`${styles.buttonWrapper} ${
+                    toolbarPosition() &&
+                    typeof window !== "undefined" &&
+                    toolbarPosition()!.x > window.innerWidth - 120
+                      ? styles.buttonWrapperAlignRight
+                      : ""
+                  }`}
+                >
+                  <button
+                    class={styles.controlButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      setIsActive(false);
+                    }}
+                  >
+                    <IconXmarkLarge size={24} />
+                  </button>
+                  <span class={styles.buttonTooltip}>
+                    Exit
+                    <span class={styles.shortcut}>Esc</span>
+                  </span>
+                </div>
+              </div>
+              <SettingsPanel
+                settings={settings()}
+                onSettingsChange={(patch) => setSettings((s) => ({ ...s, ...patch }))}
+                isDarkMode={isDarkMode()}
+                onToggleTheme={toggleTheme}
+                isDevMode={isDevMode}
+                connectionStatus={connectionStatus()}
+                endpoint={props.endpoint}
+                isVisible={showSettingsVisible()}
+                toolbarNearBottom={!!toolbarPosition() && toolbarPosition()!.y < 230}
+                settingsPage={settingsPage()}
+                onSettingsPageChange={setSettingsPage}
+                onHideToolbar={hideToolbarTemporarily}
+              />
+            </div>
+          </div>
 
-              // Render individual element boxes if available (cmd+shift+click multi-select)
-              if (hoveredAnnotation.elementBoundingBoxes?.length) {
-                // Use live positions from hoveredTargetElements when available
-                if (hoveredTargetElements.length > 0) {
-                  return hoveredTargetElements
-                    .filter((el) => document.contains(el))
-                    .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
-                      return (
-                        <div
-                          key={`hover-outline-live-${index}`}
-                          className={`${styles.multiSelectOutline} ${styles.enter}`}
-                          style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
-                          }}
-                        />
-                      );
-                    });
-                }
-                // Fallback to stored bounding boxes
-                return hoveredAnnotation.elementBoundingBoxes.map(
-                  (bb, index) => (
+          {/* Markers layer - normal scrolling markers */}
+          <div class={styles.markersLayer} data-feedback-toolbar>
+            <Show when={markersVisible()}>
+              <For each={visibleAnnotations().filter((a) => !a.isFixed)}>
+                {(annotation, layerIndexFn) => {
+                  const layerIndex = layerIndexFn();
+                  const arr = visibleAnnotations().filter((a) => !a.isFixed);
+                  return (
+                    <AnnotationMarker
+                      annotation={annotation}
+                      globalIndex={annotations().findIndex((a) => a.id === annotation.id)}
+                      layerIndex={layerIndex}
+                      layerSize={arr.length}
+                      isExiting={markersExiting()}
+                      isClearing={isClearing()}
+                      isAnimated={animatedMarkers().has(annotation.id)}
+                      isHovered={!markersExiting() && hoveredMarkerId() === annotation.id}
+                      isDeleting={deletingMarkerId() === annotation.id}
+                      isEditingAny={!!editingAnnotation()}
+                      renumberFrom={renumberFrom()}
+                      markerClickBehavior={settings().markerClickBehavior}
+                      tooltipStyle={getTooltipPosition(annotation)}
+                      onHoverEnter={(a) =>
+                        !markersExiting() &&
+                        a.id !== recentlyAddedIdRef &&
+                        handleMarkerHover(a)
+                      }
+                      onHoverLeave={() => handleMarkerHover(null)}
+                      onClick={(a) =>
+                        settings().markerClickBehavior === "delete"
+                          ? deleteAnnotation(a.id)
+                          : startEditAnnotation(a)
+                      }
+                      onContextMenu={startEditAnnotation}
+                    />
+                  );
+                }}
+              </For>
+              <Show when={!markersExiting()}>
+                <For each={exitingAnnotationsList().filter((a) => !a.isFixed)}>
+                  {(a) => <ExitingMarker annotation={a} />}
+                </For>
+              </Show>
+            </Show>
+          </div>
+
+          {/* Fixed markers layer */}
+          <div class={styles.fixedMarkersLayer} data-feedback-toolbar>
+            <Show when={markersVisible()}>
+              <For each={visibleAnnotations().filter((a) => a.isFixed)}>
+                {(annotation, layerIndexFn) => {
+                  const layerIndex = layerIndexFn();
+                  const arr = visibleAnnotations().filter((a) => a.isFixed);
+                  return (
+                    <AnnotationMarker
+                      annotation={annotation}
+                      globalIndex={annotations().findIndex((a) => a.id === annotation.id)}
+                      layerIndex={layerIndex}
+                      layerSize={arr.length}
+                      isExiting={markersExiting()}
+                      isClearing={isClearing()}
+                      isAnimated={animatedMarkers().has(annotation.id)}
+                      isHovered={!markersExiting() && hoveredMarkerId() === annotation.id}
+                      isDeleting={deletingMarkerId() === annotation.id}
+                      isEditingAny={!!editingAnnotation()}
+                      renumberFrom={renumberFrom()}
+                      markerClickBehavior={settings().markerClickBehavior}
+                      tooltipStyle={getTooltipPosition(annotation)}
+                      onHoverEnter={(a) =>
+                        !markersExiting() &&
+                        a.id !== recentlyAddedIdRef &&
+                        handleMarkerHover(a)
+                      }
+                      onHoverLeave={() => handleMarkerHover(null)}
+                      onClick={(a) =>
+                        settings().markerClickBehavior === "delete"
+                          ? deleteAnnotation(a.id)
+                          : startEditAnnotation(a)
+                      }
+                      onContextMenu={startEditAnnotation}
+                    />
+                  );
+                }}
+              </For>
+              <Show when={!markersExiting()}>
+                <For each={exitingAnnotationsList().filter((a) => a.isFixed)}>
+                  {(a) => <ExitingMarker annotation={a} fixed />}
+                </For>
+              </Show>
+            </Show>
+          </div>
+
+
+          {/* Interactive overlay */}
+          <Show when={isActive()}>
+            <div
+              class={styles.overlay}
+              data-feedback-toolbar
+              style={
+                pendingAnnotation() || editingAnnotation()
+                  ? { "z-index": 99999 }
+                  : undefined
+              }
+            >
+              {/* Hover highlight */}
+              <Show when={hoverInfo()?.rect && !pendingAnnotation() && !isScrolling() && !isDragging()}>
+                {(() => {
+                  const hi = hoverInfo()!;
+                  return (
                     <div
-                      key={`hover-outline-${index}`}
-                      className={`${styles.multiSelectOutline} ${styles.enter}`}
+                      class={`${styles.hoverHighlight} ${styles.enter}`}
                       style={{
-                        left: bb.x,
-                        top: bb.y - scrollY,
-                        width: bb.width,
-                        height: bb.height,
+                        left: `${hi.rect!.left}px`,
+                        top: `${hi.rect!.top}px`,
+                        width: `${hi.rect!.width}px`,
+                        height: `${hi.rect!.height}px`,
+                        "border-color": "color-mix(in srgb, var(--agentation-color-accent) 50%, transparent)",
+                        "background-color": "color-mix(in srgb, var(--agentation-color-accent) 4%, transparent)",
                       }}
                     />
-                  ),
-                );
-              }
+                  );
+                })()}
+              </Show>
 
-              // Single element: use live position from hoveredTargetElement when available
-              const rect =
-                hoveredTargetElement && document.contains(hoveredTargetElement)
-                  ? hoveredTargetElement.getBoundingClientRect()
-                  : null;
+              {/* Cmd+shift+click multi-select highlights (during selection, before releasing modifiers) */}
+              <For each={pendingMultiSelectElements().filter((item) => document.contains(item.element))}>
+                {(item) => {
+                  const rect = item.element.getBoundingClientRect();
+                  // Only show green if 2+ elements selected, otherwise use default blue
+                  const isMulti = pendingMultiSelectElements().length > 1;
+                  return (
+                    <div
+                      class={
+                        isMulti
+                          ? styles.multiSelectOutline
+                          : styles.singleSelectOutline
+                      }
+                      style={{
+                        position: "fixed",
+                        left: `${rect.left}px`,
+                        top: `${rect.top}px`,
+                        width: `${rect.width}px`,
+                        height: `${rect.height}px`,
+                        ...(isMulti
+                          ? {}
+                          : {
+                              "border-color": "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                              "background-color": "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                            }),
+                      }}
+                    />
+                  );
+                }}
+              </For>
 
-              const bb = rect
-                ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-                : {
-                    x: hoveredAnnotation.boundingBox.x,
-                    y: hoveredAnnotation.isFixed
-                      ? hoveredAnnotation.boundingBox.y
-                      : hoveredAnnotation.boundingBox.y - scrollY,
-                    width: hoveredAnnotation.boundingBox.width,
-                    height: hoveredAnnotation.boundingBox.height,
-                  };
+              {/* Marker hover outline (shows bounding box of hovered annotation) */}
+              <Show when={hoveredMarkerId() && !pendingAnnotation()}>
+                {(() => {
+                  const hoveredAnnotation = () => annotations().find(
+                    (a) => a.id === hoveredMarkerId(),
+                  );
 
-              const isMulti = hoveredAnnotation.isMultiSelect;
-              return (
-                <div
-                  className={`${isMulti ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
-                  style={{
-                    left: bb.x,
-                    top: bb.y,
-                    width: bb.width,
-                    height: bb.height,
-                    ...(isMulti
-                      ? {}
-                      : {
-                          borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                          backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                        }),
-                  }}
-                />
-              );
-            })()}
+                  return (
+                    <Show when={hoveredAnnotation()?.boundingBox}>
+                      {(() => {
+                        const ha = hoveredAnnotation()!;
 
-          {/* Hover tooltip */}
-          {hoverInfo && !pendingAnnotation && !isScrolling && !isDragging && (
-            <div
-              className={`${styles.hoverTooltip} ${styles.enter}`}
-              style={{
-                left: Math.max(
-                  8,
-                  Math.min(hoverPosition.x, window.innerWidth - 100),
-                ),
-                top: Math.max(
-                  hoverPosition.y - (hoverInfo.reactComponents ? 48 : 32),
-                  8,
-                ),
-              }}
-            >
-              {hoverInfo.reactComponents && (
-                <div className={styles.hoverReactPath}>
-                  {hoverInfo.reactComponents}
-                </div>
-              )}
-              <div className={styles.hoverElementName}>
-                {hoverInfo.elementName}
-              </div>
-            </div>
-          )}
+                        // Render individual element boxes if available (cmd+shift+click multi-select)
+                        if (ha.elementBoundingBoxes?.length) {
+                          // Use live positions from hoveredTargetElements when available
+                          if (hoveredTargetElements().length > 0) {
+                            return (
+                              <For each={hoveredTargetElements().filter((el) => document.contains(el))}>
+                                {(el) => {
+                                  const rect = el.getBoundingClientRect();
+                                  return (
+                                    <div
+                                      class={`${styles.multiSelectOutline} ${styles.enter}`}
+                                      style={{
+                                        left: `${rect.left}px`,
+                                        top: `${rect.top}px`,
+                                        width: `${rect.width}px`,
+                                        height: `${rect.height}px`,
+                                      }}
+                                    />
+                                  );
+                                }}
+                              </For>
+                            );
+                          }
+                          // Fallback to stored bounding boxes
+                          return (
+                            <For each={ha.elementBoundingBoxes}>
+                              {(bb) => (
+                                <div
+                                  class={`${styles.multiSelectOutline} ${styles.enter}`}
+                                  style={{
+                                    left: `${bb.x}px`,
+                                    top: `${bb.y - scrollY()}px`,
+                                    width: `${bb.width}px`,
+                                    height: `${bb.height}px`,
+                                  }}
+                                />
+                              )}
+                            </For>
+                          );
+                        }
 
-          {/* Pending annotation marker + popup */}
-          {pendingAnnotation && (
-            <>
-              {/* Show element/area outline while adding annotation */}
-              {pendingAnnotation.multiSelectElements?.length
-                ? // Cmd+shift+click multi-select: show individual boxes with live positions
-                  pendingAnnotation.multiSelectElements
-                    .filter((el) => document.contains(el))
-                    .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
-                      return (
-                        <div
-                          key={`pending-multi-${index}`}
-                          className={`${styles.multiSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
-                          style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
-                          }}
-                        />
-                      );
-                    })
-                : // Single element or drag multi-select: show single box
-                  pendingAnnotation.targetElement &&
-                  document.contains(pendingAnnotation.targetElement)
-                    ? // Single-click: use live getBoundingClientRect for consistent positioning
-                      (() => {
+                        // Single element: use live position from hoveredTargetElement when available
+                        const hte = hoveredTargetElement();
                         const rect =
-                          pendingAnnotation.targetElement!.getBoundingClientRect();
+                          hte && document.contains(hte)
+                            ? hte.getBoundingClientRect()
+                            : null;
+
+                        const bb = rect
+                          ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+                          : {
+                              x: ha.boundingBox!.x,
+                              y: ha.isFixed
+                                ? ha.boundingBox!.y
+                                : ha.boundingBox!.y - scrollY(),
+                              width: ha.boundingBox!.width,
+                              height: ha.boundingBox!.height,
+                            };
+
+                        const isMulti = ha.isMultiSelect;
                         return (
                           <div
-                            className={`${styles.singleSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
+                            class={`${isMulti ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
                             style={{
-                              left: rect.left,
-                              top: rect.top,
-                              width: rect.width,
-                              height: rect.height,
-                              borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                              backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                              left: `${bb.x}px`,
+                              top: `${bb.y}px`,
+                              width: `${bb.width}px`,
+                              height: `${bb.height}px`,
+                              ...(isMulti
+                                ? {}
+                                : {
+                                    "border-color": "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                    "background-color": "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                  }),
                             }}
                           />
                         );
-                      })()
-                    : // Drag selection or fallback: use stored boundingBox
-                      pendingAnnotation.boundingBox && (
-                        <div
-                          className={`${pendingAnnotation.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
-                          style={{
-                            left: pendingAnnotation.boundingBox.x,
-                            top: pendingAnnotation.boundingBox.y - scrollY,
-                            width: pendingAnnotation.boundingBox.width,
-                            height: pendingAnnotation.boundingBox.height,
-                            ...(pendingAnnotation.isMultiSelect
-                              ? {}
-                              : {
-                                  borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                                  backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                                }),
-                          }}
-                        />
-                      )}
+                      })()}
+                    </Show>
+                  );
+                })()}
+              </Show>
 
-              {(() => {
-                // Use stored coordinates - they match what will be saved
-                const markerX = pendingAnnotation.x;
-                const markerY = pendingAnnotation.isFixed
-                  ? pendingAnnotation.y
-                  : pendingAnnotation.y - scrollY;
-
-                return (
-                  <>
-                    <PendingMarker
-                      x={markerX}
-                      y={markerY}
-                      isMultiSelect={pendingAnnotation.isMultiSelect}
-                      isExiting={pendingExiting}
-                    />
-
-                    <AnnotationPopupCSS
-                      ref={popupRef}
-                      element={pendingAnnotation.element}
-                      selectedText={pendingAnnotation.selectedText}
-                      computedStyles={pendingAnnotation.computedStylesObj}
-                      placeholder={
-                        pendingAnnotation.element === "Area selection"
-                          ? "What should change in this area?"
-                          : pendingAnnotation.isMultiSelect
-                            ? "Feedback for this group of elements..."
-                            : "What should change?"
-                      }
-                      onSubmit={addAnnotation}
-                      onCancel={cancelAnnotation}
-                      isExiting={pendingExiting}
-                      lightMode={!isDarkMode}
-                      accentColor={
-                        pendingAnnotation.isMultiSelect
-                          ? "var(--agentation-color-green)"
-                          : "var(--agentation-color-accent)"
-                      }
+              {/* Hover tooltip */}
+              <Show when={hoverInfo() && !pendingAnnotation() && !isScrolling() && !isDragging()}>
+                {(() => {
+                  const hi = hoverInfo()!;
+                  const hp = hoverPosition();
+                  return (
+                    <div
+                      class={`${styles.hoverTooltip} ${styles.enter}`}
                       style={{
-                        // Popup is 280px wide, centered with translateX(-50%), so 140px each side
-                        // Clamp so popup stays 20px from viewport edges
-                        left: Math.max(
-                          160,
-                          Math.min(
-                            window.innerWidth - 160,
-                            (markerX / 100) * window.innerWidth,
-                          ),
-                        ),
-                        // Position popup above or below marker to keep marker visible
-                        ...(markerY > window.innerHeight - 290
-                          ? { bottom: window.innerHeight - markerY + 20 }
-                          : { top: markerY + 20 }),
+                        left: `${Math.max(
+                          8,
+                          Math.min(hp.x, window.innerWidth - 100),
+                        )}px`,
+                        top: `${Math.max(
+                          hp.y - (hi.reactComponents ? 48 : 32),
+                          8,
+                        )}px`,
                       }}
-                    />
-                  </>
-                );
-              })()}
-            </>
-          )}
+                    >
+                      <Show when={hi.reactComponents}>
+                        <div class={styles.hoverReactPath}>
+                          {hi.reactComponents}
+                        </div>
+                      </Show>
+                      <div class={styles.hoverElementName}>
+                        {hi.elementName}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </Show>
 
-          {/* Edit annotation popup */}
-          {editingAnnotation && (
-            <>
-              {/* Show element/area outline while editing */}
-              {editingAnnotation.elementBoundingBoxes?.length
-                ? // Cmd+shift+click: show individual element boxes (use live rects when available)
-                  (() => {
-                    // Use live positions from editingTargetElements when available
-                    if (editingTargetElements.length > 0) {
-                      return editingTargetElements
-                        .filter((el) => document.contains(el))
-                        .map((el, index) => {
-                          const rect = el.getBoundingClientRect();
-                          return (
-                            <div
-                              key={`edit-multi-live-${index}`}
-                              className={`${styles.multiSelectOutline} ${styles.enter}`}
+              {/* Pending annotation marker + popup */}
+              <Show when={pendingAnnotation()}>
+                {(() => {
+                  const pa = pendingAnnotation()!;
+                  return (
+                    <>
+                      {/* Show element/area outline while adding annotation */}
+                      {pa.multiSelectElements?.length
+                        ? // Cmd+shift+click multi-select: show individual boxes with live positions
+                          <For each={pa.multiSelectElements.filter((el) => document.contains(el))}>
+                            {(el) => {
+                              const rect = el.getBoundingClientRect();
+                              return (
+                                <div
+                                  class={`${styles.multiSelectOutline} ${pendingExiting() ? styles.exit : styles.enter}`}
+                                  style={{
+                                    left: `${rect.left}px`,
+                                    top: `${rect.top}px`,
+                                    width: `${rect.width}px`,
+                                    height: `${rect.height}px`,
+                                  }}
+                                />
+                              );
+                            }}
+                          </For>
+                        : // Single element or drag multi-select: show single box
+                          pa.targetElement &&
+                          document.contains(pa.targetElement)
+                            ? // Single-click: use live getBoundingClientRect for consistent positioning
+                              (() => {
+                                const rect =
+                                  pa.targetElement!.getBoundingClientRect();
+                                return (
+                                  <div
+                                    class={`${styles.singleSelectOutline} ${pendingExiting() ? styles.exit : styles.enter}`}
+                                    style={{
+                                      left: `${rect.left}px`,
+                                      top: `${rect.top}px`,
+                                      width: `${rect.width}px`,
+                                      height: `${rect.height}px`,
+                                      "border-color": "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                      "background-color": "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                    }}
+                                  />
+                                );
+                              })()
+                            : // Drag selection or fallback: use stored boundingBox
+                              pa.boundingBox && (
+                                <div
+                                  class={`${pa.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${pendingExiting() ? styles.exit : styles.enter}`}
+                                  style={{
+                                    left: `${pa.boundingBox.x}px`,
+                                    top: `${pa.boundingBox.y - scrollY()}px`,
+                                    width: `${pa.boundingBox.width}px`,
+                                    height: `${pa.boundingBox.height}px`,
+                                    ...(pa.isMultiSelect
+                                      ? {}
+                                      : {
+                                          "border-color": "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                          "background-color": "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                        }),
+                                  }}
+                                />
+                              )}
+
+                      {(() => {
+                        // Use stored coordinates - they match what will be saved
+                        const markerX = pa.x;
+                        const markerY = pa.isFixed
+                          ? pa.y
+                          : pa.y - scrollY();
+
+                        return (
+                          <>
+                            <PendingMarker
+                              x={markerX}
+                              y={markerY}
+                              isMultiSelect={pa.isMultiSelect}
+                              isExiting={pendingExiting()}
+                            />
+
+                            <AnnotationPopupCSS
+                              ref={(handle) => popupRef = handle}
+                              element={pa.element}
+                              selectedText={pa.selectedText}
+                              computedStyles={pa.computedStylesObj}
+                              placeholder={
+                                pa.element === "Area selection"
+                                  ? "What should change in this area?"
+                                  : pa.isMultiSelect
+                                    ? "Feedback for this group of elements..."
+                                    : "What should change?"
+                              }
+                              onSubmit={addAnnotation}
+                              onCancel={cancelAnnotation}
+                              isExiting={pendingExiting()}
+                              lightMode={!isDarkMode()}
+                              accentColor={
+                                pa.isMultiSelect
+                                  ? "var(--agentation-color-green)"
+                                  : "var(--agentation-color-accent)"
+                              }
                               style={{
-                                left: rect.left,
-                                top: rect.top,
-                                width: rect.width,
-                                height: rect.height,
+                                // Popup is 280px wide, centered with translateX(-50%), so 140px each side
+                                // Clamp so popup stays 20px from viewport edges
+                                left: `${Math.max(
+                                  160,
+                                  Math.min(
+                                    window.innerWidth - 160,
+                                    (markerX / 100) * window.innerWidth,
+                                  ),
+                                )}px`,
+                                // Position popup above or below marker to keep marker visible
+                                ...(markerY > window.innerHeight - 290
+                                  ? { bottom: `${window.innerHeight - markerY + 20}px` }
+                                  : { top: `${markerY + 20}px` }),
                               }}
                             />
-                          );
-                        });
-                    }
-                    // Fallback to stored bounding boxes
-                    return editingAnnotation.elementBoundingBoxes!.map(
-                      (bb, index) => (
-                        <div
-                          key={`edit-multi-${index}`}
-                          className={`${styles.multiSelectOutline} ${styles.enter}`}
-                          style={{
-                            left: bb.x,
-                            top: bb.y - scrollY,
-                            width: bb.width,
-                            height: bb.height,
-                          }}
-                        />
-                      ),
-                    );
-                  })()
-                : // Single element or drag multi-select: show single box
-                  (() => {
-                    // Use live position from editingTargetElement when available
-                    const rect =
-                      editingTargetElement &&
-                      document.contains(editingTargetElement)
-                        ? editingTargetElement.getBoundingClientRect()
-                        : null;
-
-                    const bb = rect
-                      ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-                      : editingAnnotation.boundingBox
-                        ? {
-                            x: editingAnnotation.boundingBox.x,
-                            y: editingAnnotation.isFixed
-                              ? editingAnnotation.boundingBox.y
-                              : editingAnnotation.boundingBox.y - scrollY,
-                            width: editingAnnotation.boundingBox.width,
-                            height: editingAnnotation.boundingBox.height,
-                          }
-                        : null;
-
-                    if (!bb) return null;
-
-                    return (
-                      <div
-                        className={`${editingAnnotation.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
-                        style={{
-                          left: bb.x,
-                          top: bb.y,
-                          width: bb.width,
-                          height: bb.height,
-                          ...(editingAnnotation.isMultiSelect
-                            ? {}
-                            : {
-                                borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                                backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                              }),
-                        }}
-                      />
-                    );
-                  })()}
-
-              <AnnotationPopupCSS
-                ref={editPopupRef}
-                element={editingAnnotation.element}
-                selectedText={editingAnnotation.selectedText}
-                computedStyles={parseComputedStylesString(
-                  editingAnnotation.computedStyles,
-                )}
-                placeholder="Edit your feedback..."
-                initialValue={editingAnnotation.comment}
-                submitLabel="Save"
-                onSubmit={updateAnnotation}
-                onCancel={cancelEditAnnotation}
-                onDelete={() => deleteAnnotation(editingAnnotation.id)}
-                isExiting={editExiting}
-                lightMode={!isDarkMode}
-                accentColor={
-                  editingAnnotation.isMultiSelect
-                    ? "var(--agentation-color-green)"
-                    : "var(--agentation-color-accent)"
-                }
-                style={(() => {
-                  const markerY = editingAnnotation.isFixed
-                    ? editingAnnotation.y
-                    : editingAnnotation.y - scrollY;
-                  return {
-                    // Popup is 280px wide, centered with translateX(-50%), so 140px each side
-                    // Clamp so popup stays 20px from viewport edges
-                    left: Math.max(
-                      160,
-                      Math.min(
-                        window.innerWidth - 160,
-                        (editingAnnotation.x / 100) * window.innerWidth,
-                      ),
-                    ),
-                    // Position popup above or below marker to keep marker visible
-                    ...(markerY > window.innerHeight - 290
-                      ? { bottom: window.innerHeight - markerY + 20 }
-                      : { top: markerY + 20 }),
-                  };
+                          </>
+                        );
+                      })()}
+                    </>
+                  );
                 })()}
-              />
-            </>
-          )}
+              </Show>
 
-          {/* Drag selection - all visuals use refs for smooth 60fps */}
-          {isDragging && (
-            <>
-              <div ref={dragRectRef} className={styles.dragSelection} />
-              <div
-                ref={highlightsContainerRef}
-                className={styles.highlightsContainer}
-              />
-            </>
-          )}
+              {/* Edit annotation popup */}
+              <Show when={editingAnnotation()}>
+                {(() => {
+                  const ea = editingAnnotation()!;
+                  return (
+                    <>
+                      {/* Show element/area outline while editing */}
+                      {ea.elementBoundingBoxes?.length
+                        ? // Cmd+shift+click: show individual element boxes (use live rects when available)
+                          (() => {
+                            // Use live positions from editingTargetElements when available
+                            if (editingTargetElements().length > 0) {
+                              return (
+                                <For each={editingTargetElements().filter((el) => document.contains(el))}>
+                                  {(el) => {
+                                    const rect = el.getBoundingClientRect();
+                                    return (
+                                      <div
+                                        class={`${styles.multiSelectOutline} ${styles.enter}`}
+                                        style={{
+                                          left: `${rect.left}px`,
+                                          top: `${rect.top}px`,
+                                          width: `${rect.width}px`,
+                                          height: `${rect.height}px`,
+                                        }}
+                                      />
+                                    );
+                                  }}
+                                </For>
+                              );
+                            }
+                            // Fallback to stored bounding boxes
+                            return (
+                              <For each={ea.elementBoundingBoxes!}>
+                                {(bb) => (
+                                  <div
+                                    class={`${styles.multiSelectOutline} ${styles.enter}`}
+                                    style={{
+                                      left: `${bb.x}px`,
+                                      top: `${bb.y - scrollY()}px`,
+                                      width: `${bb.width}px`,
+                                      height: `${bb.height}px`,
+                                    }}
+                                  />
+                                )}
+                              </For>
+                            );
+                          })()
+                        : // Single element or drag multi-select: show single box
+                          (() => {
+                            // Use live position from editingTargetElement when available
+                            const ete = editingTargetElement();
+                            const rect =
+                              ete &&
+                              document.contains(ete)
+                                ? ete.getBoundingClientRect()
+                                : null;
+
+                            const bb = rect
+                              ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+                              : ea.boundingBox
+                                ? {
+                                    x: ea.boundingBox.x,
+                                    y: ea.isFixed
+                                      ? ea.boundingBox.y
+                                      : ea.boundingBox.y - scrollY(),
+                                    width: ea.boundingBox.width,
+                                    height: ea.boundingBox.height,
+                                  }
+                                : null;
+
+                            if (!bb) return null;
+
+                            return (
+                              <div
+                                class={`${ea.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
+                                style={{
+                                  left: `${bb.x}px`,
+                                  top: `${bb.y}px`,
+                                  width: `${bb.width}px`,
+                                  height: `${bb.height}px`,
+                                  ...(ea.isMultiSelect
+                                    ? {}
+                                    : {
+                                        "border-color": "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                        "background-color": "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                      }),
+                                }}
+                              />
+                            );
+                          })()}
+
+                      <AnnotationPopupCSS
+                        ref={(handle) => editPopupRef = handle}
+                        element={ea.element}
+                        selectedText={ea.selectedText}
+                        computedStyles={parseComputedStylesString(
+                          ea.computedStyles,
+                        )}
+                        placeholder="Edit your feedback..."
+                        initialValue={ea.comment}
+                        submitLabel="Save"
+                        onSubmit={updateAnnotation}
+                        onCancel={cancelEditAnnotation}
+                        onDelete={() => deleteAnnotation(ea.id)}
+                        isExiting={editExiting()}
+                        lightMode={!isDarkMode()}
+                        accentColor={
+                          ea.isMultiSelect
+                            ? "var(--agentation-color-green)"
+                            : "var(--agentation-color-accent)"
+                        }
+                        style={(() => {
+                          const markerY = ea.isFixed
+                            ? ea.y
+                            : ea.y - scrollY();
+                          return {
+                            // Popup is 280px wide, centered with translateX(-50%), so 140px each side
+                            // Clamp so popup stays 20px from viewport edges
+                            left: `${Math.max(
+                              160,
+                              Math.min(
+                                window.innerWidth - 160,
+                                (ea.x / 100) * window.innerWidth,
+                              ),
+                            )}px`,
+                            // Position popup above or below marker to keep marker visible
+                            ...(markerY > window.innerHeight - 290
+                              ? { bottom: `${window.innerHeight - markerY + 20}px` }
+                              : { top: `${markerY + 20}px` }),
+                          };
+                        })()}
+                      />
+                    </>
+                  );
+                })()}
+              </Show>
+
+              {/* Drag selection - all visuals use refs for smooth 60fps */}
+              <Show when={isDragging()}>
+                <div ref={(el) => dragRectRef = el} class={styles.dragSelection} />
+                <div
+                  ref={(el) => highlightsContainerRef = el}
+                  class={styles.highlightsContainer}
+                />
+              </Show>
+            </div>
+          </Show>
         </div>
-      )}
-    </div>,
-    document.body,
+      </Portal>
+    </Show>
   );
 }
 

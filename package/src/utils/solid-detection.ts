@@ -1,84 +1,18 @@
 // =============================================================================
-// React Component Name Detection
-// Uses React DevTools techniques to extract component names from fiber nodes
+// Solid Component Name Detection
+// Uses Solid's dev-mode owner tree to extract component names from DOM elements
 // =============================================================================
-
-/**
- * React Fiber node type (minimal subset we care about)
- * Based on React internal structure
- */
-interface ReactFiber {
-  tag: number;
-  type: ComponentType | string | null;
-  elementType: ComponentType | null;
-  return: ReactFiber | null;
-}
-
-interface ComponentType {
-  name?: string;
-  displayName?: string;
-  render?: { name?: string; displayName?: string };
-  type?: ComponentType;
-  _context?: { displayName?: string };
-  _status?: number;
-  _result?: ComponentType;
-  $$typeof?: symbol;
-}
-
-/**
- * Fiber tags from React source (stable across versions)
- * https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactWorkTags.js
- */
-const FiberTags = {
-  FunctionComponent: 0,
-  ClassComponent: 1,
-  IndeterminateComponent: 2,
-  HostRoot: 3,
-  HostPortal: 4,
-  HostComponent: 5, // DOM elements like <div>
-  HostText: 6,
-  Fragment: 7,
-  Mode: 8,
-  ContextConsumer: 9,
-  ContextProvider: 10,
-  ForwardRef: 11,
-  Profiler: 12,
-  SuspenseComponent: 13,
-  MemoComponent: 14,
-  SimpleMemoComponent: 15,
-  LazyComponent: 16,
-  // React 18/19 additions
-  IncompleteClassComponent: 17,
-  DehydratedFragment: 18,
-  SuspenseListComponent: 19,
-  // Note: 20 is unused/reserved
-  ScopeComponent: 21,
-  OffscreenComponent: 22,
-  LegacyHiddenComponent: 23,
-  CacheComponent: 24,
-  TracingMarkerComponent: 25,
-  HostHoistable: 26,
-  HostSingleton: 27,
-  IncompleteFunctionComponent: 28,
-  Throw: 29,
-  ViewTransitionComponent: 30,
-  ActivityComponent: 31,
-} as const;
 
 // =============================================================================
 // Default Filter Configuration
 // =============================================================================
 
 /**
- * Default exact names to always skip (React internals)
+ * Default exact names to always skip (framework internals)
  */
 export const DEFAULT_SKIP_EXACT = new Set([
-  "Component",
-  "PureComponent",
   "Fragment",
   "Suspense",
-  "Profiler",
-  "StrictMode",
   "Routes",
   "Route",
   "Outlet",
@@ -87,6 +21,15 @@ export const DEFAULT_SKIP_EXACT = new Set([
   "ErrorBoundaryHandler",
   "HotReload",
   "Hot",
+  // Solid-specific internals
+  "Show",
+  "For",
+  "Index",
+  "Switch",
+  "Match",
+  "Dynamic",
+  "Portal",
+  "ErrorBoundary",
 ]);
 
 /**
@@ -101,15 +44,10 @@ export const DEFAULT_SKIP_PATTERNS: RegExp[] = [
   /Consumer$/, // Context.Consumer
   /^(Inner|Outer)/, // InnerLayoutRouter
   /Router$/, // AppRouter, BrowserRouter
-  /^Client(Page|Segment|Root)/, // ClientPageRoot, ClientSegmentRoot
-  /^Segment(ViewNode|Node)$/, // Next.js App Router internals
-  /^LayoutSegment/, // Next.js layout segment wrappers
-  /^Server(Root|Component|Render)/, // ServerRoot (not ServerStatus)
-  /^RSC/, // RSCComponent
   /Context$/, // LayoutRouterContext
   /^Hot(Reload)?$/, // HotReload (exact match to avoid false positives)
-  /^(Dev|React)(Overlay|Tools|Root)/, // DevTools, ReactDevOverlay
-  /Overlay$/, // ReactDevOverlay, ErrorOverlay
+  /^(Dev|Solid)(Overlay|Tools|Root)/, // DevTools, SolidDevOverlay
+  /Overlay$/, // DevOverlay, ErrorOverlay
   /Handler$/, // ScrollAndFocusHandler, ErrorBoundaryHandler
   /^With[A-Z]/, // withRouter, WithAuth (HOCs)
   /Wrapper$/, // Generic wrappers
@@ -145,9 +83,9 @@ const DEFAULT_USER_PATTERNS: RegExp[] = [
 // Configuration Types
 // =============================================================================
 
-export type ReactDetectionMode = "all" | "filtered" | "smart";
+export type SolidDetectionMode = "all" | "filtered" | "smart";
 
-export interface ReactDetectionConfig {
+export interface SolidDetectionConfig {
   /**
    * How many component names to collect
    * @default 3
@@ -155,7 +93,7 @@ export interface ReactDetectionConfig {
   maxComponents?: number;
 
   /**
-   * Maximum fiber depth to traverse
+   * Maximum owner depth to traverse
    * @default 25
    */
   maxDepth?: number;
@@ -167,7 +105,7 @@ export interface ReactDetectionConfig {
    * - 'all': Show all components (no filtering)
    * @default 'filtered'
    */
-  mode?: ReactDetectionMode;
+  mode?: SolidDetectionMode;
 
   /**
    * Additional exact names to skip (merged with defaults in 'filtered' mode)
@@ -197,14 +135,14 @@ export interface ReactDetectionConfig {
 interface ResolvedConfig {
   maxComponents: number;
   maxDepth: number;
-  mode: ReactDetectionMode;
+  mode: SolidDetectionMode;
   skipExact: Set<string>;
   skipPatterns: RegExp[];
   userPatterns: RegExp[];
   filter?: (name: string, depth: number) => boolean;
 }
 
-function resolveConfig(config?: ReactDetectionConfig): ResolvedConfig {
+function resolveConfig(config?: SolidDetectionConfig): ResolvedConfig {
   const mode = config?.mode ?? "filtered";
 
   // Convert skipExact to Set if array
@@ -354,41 +292,83 @@ function shouldIncludeComponent(
 }
 
 // =============================================================================
-// React Detection
+// Solid Owner Tree Types
 // =============================================================================
 
-let reactDetectionCache: boolean | null = null;
+/**
+ * Solid's internal owner structure (dev mode only).
+ * In development builds, Solid attaches reactive ownership info to track
+ * component hierarchies. The exact shape varies between Solid versions.
+ */
+interface SolidOwner {
+  name?: string;
+  componentName?: string;
+  owner?: SolidOwner | null;
+  // Some versions use "parent" instead of "owner"
+  parent?: SolidOwner | null;
+}
+
+// =============================================================================
+// Solid Detection
+// =============================================================================
+
+let solidDetectionCache: boolean | null = null;
 
 // Only cache for 'all' mode - filtered modes should NOT cache because:
 // 1. Filter results depend on config that may change between calls
 // 2. Cached results from before filter changes would return stale/unfiltered data
 // 3. The cache lookup happens BEFORE filtering, so old cached data bypasses filters
 // Using WeakMap allows garbage collection when elements are removed from DOM.
-const componentCacheAll = new WeakMap<HTMLElement, ReactComponentInfo>();
+let componentCacheAll = new WeakMap<HTMLElement, SolidComponentInfo>();
 
 /**
- * Checks if React is present on the page
+ * Check if an element has Solid-specific owner keys.
+ * In dev mode, Solid attaches ownership properties to DOM nodes.
  */
-/**
- * Check if an element has React fiber keys
- */
-function hasReactFiber(element: Element): boolean {
-  return Object.keys(element).some(
-    (key) =>
-      key.startsWith("__reactFiber$") ||
-      key.startsWith("__reactInternalInstance$") ||
-      key.startsWith("__reactProps$"),
-  );
+function hasSolidOwner(element: Element): boolean {
+  try {
+    const keys = Object.keys(element);
+    // Check for known Solid internal property patterns
+    if (
+      keys.some(
+        (key) =>
+          key === "__$owner" ||
+          key.startsWith("__solid") ||
+          key.startsWith("__owner"),
+      )
+    ) {
+      return true;
+    }
+
+    // Check Symbol properties as well (Solid may use symbols)
+    const symbols = Object.getOwnPropertySymbols(element);
+    if (
+      symbols.some((sym) => {
+        const desc = sym.description || String(sym);
+        return (
+          desc.includes("solid") ||
+          desc.includes("owner") ||
+          desc.includes("SOLID")
+        );
+      })
+    ) {
+      return true;
+    }
+  } catch {
+    // Property access may fail in edge cases
+  }
+
+  return false;
 }
 
 /**
- * Checks if React is present on the page.
- * Scans common React root containers since React typically mounts
- * to #root, #app, #__next, etc. rather than document.body directly.
+ * Checks if Solid is present on the page.
+ * Scans common root containers since Solid typically mounts
+ * to #root, #app, etc.
  */
-export function isReactPage(): boolean {
-  if (reactDetectionCache !== null) {
-    return reactDetectionCache;
+export function isSolidPage(): boolean {
+  if (solidDetectionCache !== null) {
+    return solidDetectionCache;
   }
 
   if (typeof document === "undefined") {
@@ -396,17 +376,17 @@ export function isReactPage(): boolean {
   }
 
   // Check body first (some apps mount directly to body)
-  if (document.body && hasReactFiber(document.body)) {
-    reactDetectionCache = true;
+  if (document.body && hasSolidOwner(document.body)) {
+    solidDetectionCache = true;
     return true;
   }
 
-  // Check common React root containers
-  const commonRoots = ["#root", "#app", "#__next", "[data-reactroot]"];
+  // Check common root containers
+  const commonRoots = ["#root", "#app", "[data-solid-root]"];
   for (const selector of commonRoots) {
     const el = document.querySelector(selector);
-    if (el && hasReactFiber(el)) {
-      reactDetectionCache = true;
+    if (el && hasSolidOwner(el)) {
+      solidDetectionCache = true;
       return true;
     }
   }
@@ -414,173 +394,133 @@ export function isReactPage(): boolean {
   // Scan immediate children of body as fallback
   if (document.body) {
     for (const child of document.body.children) {
-      if (hasReactFiber(child)) {
-        reactDetectionCache = true;
+      if (hasSolidOwner(child)) {
+        solidDetectionCache = true;
         return true;
       }
     }
   }
 
-  reactDetectionCache = false;
+  // Check for Solid-specific globals that indicate a Solid app
+  try {
+    if (
+      typeof window !== "undefined" &&
+      (window as unknown as Record<string, unknown>).__SOLID_DEVTOOLS_GLOBAL_HOOK__
+    ) {
+      solidDetectionCache = true;
+      return true;
+    }
+  } catch {
+    // Ignore access errors
+  }
+
+  solidDetectionCache = false;
   return false;
 }
 
-// Wrapper object to allow cache clearing (WeakMap has no clear() method)
-let componentCacheAllRef = { map: componentCacheAll };
-
 /**
- * Clears the React detection cache
+ * Clears the Solid detection cache
  * Note: Only 'all' mode uses caching; filtered modes don't cache to avoid stale filter results
  */
-export function clearReactDetectionCache(): void {
-  reactDetectionCache = null;
-  componentCacheAllRef.map = new WeakMap<HTMLElement, ReactComponentInfo>();
+export function clearSolidDetectionCache(): void {
+  solidDetectionCache = null;
+  componentCacheAll = new WeakMap<HTMLElement, SolidComponentInfo>();
 }
 
-function getReactFiberKey(element: HTMLElement): string | null {
-  const keys = Object.keys(element);
-  return (
-    keys.find(
-      (key) =>
-        key.startsWith("__reactFiber$") ||
-        key.startsWith("__reactInternalInstance$"),
-    ) || null
-  );
-}
+/**
+ * Attempt to extract the Solid owner from a DOM element.
+ * Tries multiple known property patterns across Solid versions.
+ */
+function getOwnerFromElement(element: HTMLElement): SolidOwner | null {
+  try {
+    const record = element as unknown as Record<string | symbol, unknown>;
 
-function getFiberFromElement(element: HTMLElement): ReactFiber | null {
-  const key = getReactFiberKey(element);
-  if (!key) return null;
-  return (element as unknown as Record<string, unknown>)[
-    key
-  ] as ReactFiber | null;
-}
+    // Approach 1: Check for __$owner (common in Solid dev mode)
+    if (record.__$owner && typeof record.__$owner === "object") {
+      return record.__$owner as SolidOwner;
+    }
 
-function getComponentNameFromType(type: ComponentType | null): string | null {
-  if (!type) return null;
-  if (type.displayName) return type.displayName;
-  if (type.name) return type.name;
+    // Approach 2: Check string keys matching Solid patterns
+    const keys = Object.keys(element);
+    for (const key of keys) {
+      if (
+        key.startsWith("__solid") ||
+        key.startsWith("__owner") ||
+        key.includes("owner")
+      ) {
+        const value = record[key];
+        if (value && typeof value === "object") {
+          const candidate = value as Record<string, unknown>;
+          // Verify it looks like an owner (has name or owner/parent chain)
+          if (
+            "name" in candidate ||
+            "componentName" in candidate ||
+            "owner" in candidate ||
+            "parent" in candidate
+          ) {
+            return candidate as unknown as SolidOwner;
+          }
+        }
+      }
+    }
+
+    // Approach 3: Check Symbol properties
+    const symbols = Object.getOwnPropertySymbols(element);
+    for (const sym of symbols) {
+      const desc = sym.description || String(sym);
+      if (
+        desc.includes("solid") ||
+        desc.includes("owner") ||
+        desc.includes("SOLID")
+      ) {
+        const value = record[sym];
+        if (value && typeof value === "object") {
+          const candidate = value as Record<string, unknown>;
+          if (
+            "name" in candidate ||
+            "componentName" in candidate ||
+            "owner" in candidate ||
+            "parent" in candidate
+          ) {
+            return candidate as unknown as SolidOwner;
+          }
+        }
+      }
+    }
+  } catch {
+    // Property access may throw in edge cases
+  }
+
   return null;
 }
 
-function getComponentNameFromFiber(fiber: ReactFiber): string | null {
-  const { tag, type, elementType } = fiber;
-
-  // Skip DOM elements and host types
-  if (
-    tag === FiberTags.HostComponent ||
-    tag === FiberTags.HostText ||
-    tag === FiberTags.HostHoistable ||
-    tag === FiberTags.HostSingleton
-  ) {
-    return null;
+/**
+ * Extract the component name from a Solid owner node.
+ */
+function getNameFromOwner(owner: SolidOwner): string | null {
+  // Prefer componentName if set explicitly
+  if (owner.componentName && typeof owner.componentName === "string") {
+    return owner.componentName;
   }
 
-  // Skip Fragment, Mode, Profiler, and related internal types
-  if (
-    tag === FiberTags.Fragment ||
-    tag === FiberTags.Mode ||
-    tag === FiberTags.Profiler ||
-    tag === FiberTags.DehydratedFragment
-  ) {
-    return null;
+  // Fall back to name property
+  if (owner.name && typeof owner.name === "string") {
+    return owner.name;
   }
 
-  // Skip React internal infrastructure types (these are internal implementation details)
-  if (
-    tag === FiberTags.HostRoot ||
-    tag === FiberTags.HostPortal ||
-    tag === FiberTags.ScopeComponent ||
-    tag === FiberTags.OffscreenComponent ||
-    tag === FiberTags.LegacyHiddenComponent ||
-    tag === FiberTags.CacheComponent ||
-    tag === FiberTags.TracingMarkerComponent ||
-    tag === FiberTags.Throw ||
-    tag === FiberTags.ViewTransitionComponent ||
-    tag === FiberTags.ActivityComponent
-  ) {
-    return null;
-  }
+  return null;
+}
 
-  // Handle ForwardRef
-  if (tag === FiberTags.ForwardRef) {
-    const elType = elementType as ComponentType | null;
-    if (elType?.render) {
-      const innerName = getComponentNameFromType(elType.render);
-      if (innerName) return innerName;
-    }
-    if (elType?.displayName) return elType.displayName;
-    return getComponentNameFromType(type as ComponentType);
+/**
+ * Get the parent owner (Solid uses "owner" or "parent" depending on version)
+ */
+function getParentOwner(owner: SolidOwner): SolidOwner | null {
+  if (owner.owner && typeof owner.owner === "object") {
+    return owner.owner;
   }
-
-  // Handle Memo
-  if (
-    tag === FiberTags.MemoComponent ||
-    tag === FiberTags.SimpleMemoComponent
-  ) {
-    const elType = elementType as ComponentType | null;
-    if (elType?.type) {
-      const innerName = getComponentNameFromType(elType.type);
-      if (innerName) return innerName;
-    }
-    if (elType?.displayName) return elType.displayName;
-    return getComponentNameFromType(type as ComponentType);
+  if (owner.parent && typeof owner.parent === "object") {
+    return owner.parent;
   }
-
-  // Handle Context Provider
-  if (tag === FiberTags.ContextProvider) {
-    const elType = type as ComponentType | null;
-    if (elType?._context?.displayName) {
-      return `${elType._context.displayName}.Provider`;
-    }
-    return null;
-  }
-
-  // Handle Context Consumer
-  if (tag === FiberTags.ContextConsumer) {
-    const elType = type as ComponentType | null;
-    if (elType?.displayName) {
-      return `${elType.displayName}.Consumer`;
-    }
-    return null;
-  }
-
-  // Handle Lazy
-  if (tag === FiberTags.LazyComponent) {
-    const elType = elementType as ComponentType | null;
-    if (elType?._status === 1 && elType._result) {
-      return getComponentNameFromType(elType._result);
-    }
-    return null;
-  }
-
-  // Handle Suspense and SuspenseList
-  if (
-    tag === FiberTags.SuspenseComponent ||
-    tag === FiberTags.SuspenseListComponent
-  ) {
-    return null;
-  }
-
-  // Handle incomplete components (error states during rendering)
-  if (
-    tag === FiberTags.IncompleteClassComponent ||
-    tag === FiberTags.IncompleteFunctionComponent
-  ) {
-    // These are components that errored during rendering
-    // Try to get the name anyway for debugging purposes
-    return getComponentNameFromType(type as ComponentType);
-  }
-
-  // Function and Class components
-  if (
-    tag === FiberTags.FunctionComponent ||
-    tag === FiberTags.ClassComponent ||
-    tag === FiberTags.IndeterminateComponent
-  ) {
-    return getComponentNameFromType(type as ComponentType);
-  }
-
   return null;
 }
 
@@ -589,9 +529,9 @@ function getComponentNameFromFiber(fiber: ReactFiber): string | null {
 // =============================================================================
 
 /**
- * Result from React component detection
+ * Result from Solid component detection
  */
-export interface ReactComponentInfo {
+export interface SolidComponentInfo {
   /** Full component path like "<App> <Layout> <Button>" */
   path: string | null;
   /** Array of component names from innermost to outermost */
@@ -610,35 +550,34 @@ function isMinifiedName(name: string): boolean {
 }
 
 /**
- * Walks up the fiber tree to collect React component names
+ * Walks up the owner tree to collect Solid component names
  *
  * @param element - The DOM element to start from
  * @param config - Optional configuration
- * @returns ReactComponentInfo with component path and array
+ * @returns SolidComponentInfo with component path and array
  */
-export function getReactComponentName(
+export function getSolidComponentName(
   element: HTMLElement,
-  config?: ReactDetectionConfig,
-): ReactComponentInfo {
+  config?: SolidDetectionConfig,
+): SolidComponentInfo {
   const resolved = resolveConfig(config);
 
   // Only use cache for 'all' mode - filtered modes must NOT cache because:
   // - Cache lookup happens BEFORE filtering logic runs
   // - Cached results from before filter updates would bypass new filters
-  // - This was causing "Root", "ErrorBoundaryHandler" to leak through
   const useCache = resolved.mode === "all";
 
   if (useCache) {
-    const cached = componentCacheAllRef.map.get(element);
+    const cached = componentCacheAll.get(element);
     if (cached !== undefined) {
       return cached;
     }
   }
 
-  if (!isReactPage()) {
-    const result: ReactComponentInfo = { path: null, components: [] };
+  if (!isSolidPage()) {
+    const result: SolidComponentInfo = { path: null, components: [] };
     if (useCache) {
-      componentCacheAllRef.map.set(element, result);
+      componentCacheAll.set(element, result);
     }
     return result;
   }
@@ -650,15 +589,15 @@ export function getReactComponentName(
   const components: string[] = [];
 
   try {
-    let fiber = getFiberFromElement(element);
+    let owner = getOwnerFromElement(element);
     let depth = 0;
 
     while (
-      fiber &&
+      owner &&
       depth < resolved.maxDepth &&
       components.length < resolved.maxComponents
     ) {
-      const name = getComponentNameFromFiber(fiber);
+      const name = getNameFromOwner(owner);
 
       // Skip minified names and apply filter
       if (
@@ -669,22 +608,22 @@ export function getReactComponentName(
         components.push(name);
       }
 
-      fiber = fiber.return;
+      owner = getParentOwner(owner);
       depth++;
     }
   } catch {
-    // Fiber structure may be corrupted or inaccessible - return empty result
-    const result: ReactComponentInfo = { path: null, components: [] };
+    // Owner structure may be corrupted or inaccessible - return empty result
+    const result: SolidComponentInfo = { path: null, components: [] };
     if (useCache) {
-      componentCacheAllRef.map.set(element, result);
+      componentCacheAll.set(element, result);
     }
     return result;
   }
 
   if (components.length === 0) {
-    const result: ReactComponentInfo = { path: null, components: [] };
+    const result: SolidComponentInfo = { path: null, components: [] };
     if (useCache) {
-      componentCacheAllRef.map.set(element, result);
+      componentCacheAll.set(element, result);
     }
     return result;
   }
@@ -696,9 +635,9 @@ export function getReactComponentName(
     .map((c) => `<${c}>`)
     .join(" ");
 
-  const result: ReactComponentInfo = { path, components };
+  const result: SolidComponentInfo = { path, components };
   if (useCache) {
-    componentCacheAllRef.map.set(element, result);
+    componentCacheAll.set(element, result);
   }
   return result;
 }

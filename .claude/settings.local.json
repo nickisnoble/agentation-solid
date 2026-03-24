@@ -107,7 +107,8 @@
       "Bash(do echo \"=== Session: $id ===\" curl -s \"http://localhost:4747/sessions/$id\")",
       "Bash(git rev-parse:*)",
       "Bash(git log:*)",
-      "mcp__agentation__agentation_get_all_pending"
+      "mcp__agentation__agentation_get_all_pending",
+      "Bash(npx tsup:*)"
     ]
   },
   "enableAllProjectMcpServers": false

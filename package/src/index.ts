@@ -1,12 +1,12 @@
 // =============================================================================
-// Agentation
+// Agentation (SolidJS)
 // =============================================================================
 //
 // A floating toolbar for annotating web pages and collecting structured feedback
-// for AI coding agents.
+// for AI coding agents. SolidJS edition.
 //
 // Usage:
-//   import { Agentation } from 'agentation';
+//   import { Agentation } from 'agentation-solid';
 //   <Agentation />
 //
 // =============================================================================

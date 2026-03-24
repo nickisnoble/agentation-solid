@@ -6,10 +6,10 @@ interface HelpTooltipProps {
   content: string;
 }
 
-export const HelpTooltip = ({ content }: HelpTooltipProps) => {
+export const HelpTooltip = (props: HelpTooltipProps) => {
   return (
-    <Tooltip className={styles.tooltip} content={content}>
-      <IconHelp className={styles.tooltipIcon} />
+    <Tooltip class={styles.tooltip} content={props.content}>
+      <IconHelp class={styles.tooltipIcon} />
     </Tooltip>
   );
 };

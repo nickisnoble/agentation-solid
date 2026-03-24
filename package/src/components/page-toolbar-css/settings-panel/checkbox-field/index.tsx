@@ -1,32 +1,35 @@
-import { useId } from "react";
+import { JSX, splitProps, createUniqueId } from "solid-js";
+import { Show } from "solid-js";
 import { Checkbox } from "../../../checkbox";
 import { HelpTooltip } from "../../../help-tooltip";
 import styles from "./styles.module.scss";
 
-interface CheckboxFieldProps extends React.HTMLAttributes<HTMLDivElement> {
+interface CheckboxFieldProps extends JSX.HTMLAttributes<HTMLDivElement> {
   label: string;
   tooltip?: string;
   checked?: boolean;
-  onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  onChange?: (e: Event & { currentTarget: HTMLInputElement }) => void;
 }
 
-export const CheckboxField = ({
-  className = "",
-  label,
-  tooltip,
-  checked,
-  onChange,
-  ...props
-}: CheckboxFieldProps) => {
-  const id = useId();
+export const CheckboxField = (props: CheckboxFieldProps) => {
+  const [local, rest] = splitProps(props, [
+    "class",
+    "label",
+    "tooltip",
+    "checked",
+    "onChange",
+  ]);
+  const id = createUniqueId();
 
   return (
-    <div className={`${styles.container} ${className}`} {...props}>
-      <Checkbox id={id} onChange={onChange} checked={checked} />
-      <label className={styles.label} htmlFor={id}>
-        {label}
+    <div class={`${styles.container} ${local.class ?? ""}`} {...rest}>
+      <Checkbox id={id} onChange={local.onChange} checked={local.checked} />
+      <label class={styles.label} for={id}>
+        {local.label}
       </label>
-      {tooltip && <HelpTooltip content={tooltip} />}
+      <Show when={local.tooltip}>
+        <HelpTooltip content={local.tooltip!} />
+      </Show>
     </div>
   );
 };

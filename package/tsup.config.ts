@@ -83,7 +83,7 @@ export default {};
 }
 
 export default defineConfig((options) => [
-  // React component
+  // SolidJS component
   {
     entry: ["src/index.ts"],
     format: ["cjs", "esm"],
@@ -91,13 +91,13 @@ export default defineConfig((options) => [
     splitting: false,
     sourcemap: true,
     clean: !options.watch,
-    external: ["react", "react-dom"],
+    external: ["solid-js", "solid-js/web"],
     esbuildPlugins: [scssModulesPlugin()],
+    esbuildOptions(options) {
+      options.jsx = "preserve";
+    },
     define: {
       __VERSION__: JSON.stringify(VERSION),
-    },
-    banner: {
-      js: '"use client";',
     },
   },
 ]);
