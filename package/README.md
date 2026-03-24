@@ -1,26 +1,30 @@
 <img src="https://raw.githubusercontent.com/benjitaylor/agentation/main/package/logo.svg" alt="Agentation" width="50" />
 
-[![npm version](https://img.shields.io/npm/v/agentation)](https://www.npmjs.com/package/agentation)
-[![downloads](https://img.shields.io/npm/dm/agentation)](https://www.npmjs.com/package/agentation)
+# agentation-solid
 
-**[Agentation](https://agentation.dev)** is an agent-agnostic visual feedback tool. Click elements on your page, add notes, and copy structured output that helps AI coding agents find the exact code you're referring to.
+**[Agentation](https://agentation.dev)** for SolidJS. An agent-agnostic visual feedback tool. Click elements on your page, add notes, and copy structured output that helps AI coding agents find the exact code you're referring to.
+
+This is a SolidJS port of [agentation](https://www.npmjs.com/package/agentation) with 99% identical UX and DX.
 
 ## Install
 
 ```bash
-npm install agentation -D
+npm install agentation-solid -D
 ```
 
 ## Usage
 
 ```tsx
-import { Agentation } from 'agentation';
+import { Agentation } from 'agentation-solid';
+import { Show } from 'solid-js';
 
 function App() {
   return (
     <>
       <YourApp />
-      <Agentation />
+      <Show when={import.meta.env.DEV}>
+        <Agentation />
+      </Show>
     </>
   );
 }
@@ -30,15 +34,16 @@ The toolbar appears in the bottom-right corner. Click to activate, then click an
 
 ## Features
 
-- **Click to annotate** – Click any element with automatic selector identification
-- **Text selection** – Select text to annotate specific content
-- **Multi-select** – Drag to select multiple elements at once
-- **Area selection** – Drag to annotate any region, even empty space
-- **Animation pause** – Freeze all animations (CSS, JS, videos) to capture specific states
-- **Structured output** – Copy markdown with selectors, positions, and context
-- **Programmatic access** – Callback prop for direct integration with tools
-- **Dark/light mode** – Toggle in settings, persists to localStorage
-- **Zero dependencies** – Pure CSS animations, no runtime libraries
+- **Click to annotate** -- Click any element with automatic selector identification
+- **Text selection** -- Select text to annotate specific content
+- **Multi-select** -- Drag to select multiple elements at once
+- **Area selection** -- Drag to annotate any region, even empty space
+- **Animation pause** -- Freeze all animations (CSS, JS, videos) to capture specific states
+- **Component tree** -- Shows SolidJS component names in dev mode
+- **Structured output** -- Copy markdown with selectors, positions, and context
+- **Programmatic access** -- Callback props for direct integration with tools
+- **Dark/light mode** -- Toggle in settings, persists to localStorage
+- **Zero dependencies** -- Pure CSS animations, no runtime libraries beyond SolidJS
 
 ## Props
 
@@ -51,6 +56,7 @@ The toolbar appears in the bottom-right corner. Click to activate, then click an
 | `onCopy` | `(markdown: string) => void` | - | Callback with markdown output when copy is clicked |
 | `onSubmit` | `(output: string, annotations: Annotation[]) => void` | - | Called when "Send Annotations" is clicked |
 | `copyToClipboard` | `boolean` | `true` | Set to false to prevent writing to clipboard |
+| `class` | `string` | - | Custom class name for the toolbar container |
 | `endpoint` | `string` | - | Server URL for Agent Sync (e.g., `"http://localhost:4747"`) |
 | `sessionId` | `string` | - | Pre-existing session ID to join |
 | `onSessionCreated` | `(sessionId: string) => void` | - | Called when a new session is created |
@@ -61,7 +67,7 @@ The toolbar appears in the bottom-right corner. Click to activate, then click an
 Use callbacks to receive annotation data directly:
 
 ```tsx
-import { Agentation, type Annotation } from 'agentation';
+import { Agentation, type Annotation } from 'agentation-solid';
 
 function App() {
   const handleAnnotation = (annotation: Annotation) => {
@@ -80,7 +86,7 @@ function App() {
       <YourApp />
       <Agentation
         onAnnotationAdd={handleAnnotation}
-        copyToClipboard={false}  // Don't write to clipboard
+        copyToClipboard={false}
       />
     </>
   );
@@ -110,10 +116,15 @@ type Annotation = {
   accessibility?: string;
   isMultiSelect?: boolean;
   isFixed?: boolean;
+  reactComponents?: string;     // Component hierarchy (named for MCP compat)
 };
 ```
 
-> **Note:** This is a simplified type. The full type includes additional fields for Agent Sync (`url`, `status`, `thread`, `reactComponents`, etc.). See [agentation.dev/schema](https://agentation.dev/schema) for the complete schema.
+> **Note:** The `reactComponents` field name is preserved for compatibility with the [agentation-mcp](https://www.npmjs.com/package/agentation-mcp) server. It contains SolidJS component names when running in dev mode. See [agentation.dev/schema](https://agentation.dev/schema) for the complete schema.
+
+## MCP Server Compatibility
+
+This package works with the same [agentation-mcp](https://www.npmjs.com/package/agentation-mcp) server as the React version. The annotation JSON schema is identical.
 
 ## How it works
 
@@ -121,7 +132,7 @@ Agentation captures class names, selectors, and element positions so AI agents c
 
 ## Requirements
 
-- React 18+
+- SolidJS 1.8+
 - Desktop browser (mobile not supported)
 
 ## Docs
@@ -129,7 +140,5 @@ Agentation captures class names, selectors, and element positions so AI agents c
 Full documentation at [agentation.dev](https://agentation.dev)
 
 ## License
-
-© 2026 Benji Taylor
 
 Licensed under PolyForm Shield 1.0.0
