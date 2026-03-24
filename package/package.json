@@ -1,23 +1,65 @@
 {
   "name": "agentation-solid",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Visual feedback for AI coding agents — SolidJS edition",
   "sideEffects": false,
   "license": "PolyForm-Shield-1.0.0",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "main": "./dist/server.cjs",
+  "module": "./dist/server.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
+    "worker": {
+      "solid": "./dist/server.jsx",
       "import": {
-        "types": "./dist/index.d.mts",
-        "default": "./dist/index.mjs"
+        "types": "./dist/index.d.ts",
+        "default": "./dist/server.js"
       },
       "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "browser": {
+      "solid": "./dist/index.jsx",
+      "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
       }
+    },
+    "deno": {
+      "solid": "./dist/server.jsx",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "node": {
+      "solid": "./dist/server.jsx",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "solid": "./dist/index.jsx",
+    "import": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "require": {
+      "types": "./dist/index.d.cts",
+      "default": "./dist/index.cjs"
     }
   },
   "files": [
@@ -50,5 +92,11 @@
     "tsup-preset-solid": "^2.2.0",
     "typescript": "^5.0.0",
     "vite-plugin-solid": "^2.10.0"
-  }
+  },
+  "browser": {
+    "./dist/server.js": "./dist/index.js",
+    "./dist/server.cjs": "./dist/index.cjs"
+  },
+  "typesVersions": {},
+  "type": "module"
 }

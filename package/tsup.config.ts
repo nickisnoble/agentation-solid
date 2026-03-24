@@ -1,4 +1,5 @@
-import { defineConfig, type Options } from "tsup";
+import { defineConfig } from "tsup";
+import * as preset from "tsup-preset-solid";
 import * as sass from "sass";
 import postcss from "postcss";
 import postcssModules from "postcss-modules";
@@ -82,22 +83,38 @@ export default {};
   };
 }
 
-export default defineConfig((options) => [
-  // SolidJS component
-  {
-    entry: ["src/index.ts"],
-    format: ["cjs", "esm"],
-    dts: true,
+const presetOptions: preset.PresetOptions = {
+  entries: [
+    {
+      // .tsx entry so the preset generates a `solid` export condition
+      // with preserved JSX for bundlers, plus compiled builds for Node/SSR
+      entry: "src/index.tsx",
+      server_entry: true,
+    },
+  ],
+  cjs: true,
+  esbuild_plugins: [scssModulesPlugin()],
+};
+
+export default defineConfig((config) => {
+  const watching = !!config.watch;
+  const parsed = preset.parsePresetOptions(presetOptions, watching);
+
+  if (!watching) {
+    const packageFields = preset.generatePackageExports(parsed);
+    console.log(
+      `\npackage.json exports:\n${JSON.stringify(packageFields, null, 2)}\n`
+    );
+    preset.writePackageJson(packageFields);
+  }
+
+  return preset.generateTsupOptions(parsed).map((tsupOptions) => ({
+    ...tsupOptions,
     splitting: false,
     sourcemap: true,
-    clean: !options.watch,
-    external: ["solid-js", "solid-js/web"],
-    esbuildPlugins: [scssModulesPlugin()],
-    esbuildOptions(options) {
-      options.jsx = "preserve";
-    },
     define: {
+      ...tsupOptions.define,
       __VERSION__: JSON.stringify(VERSION),
     },
-  },
-]);
+  }));
+});
