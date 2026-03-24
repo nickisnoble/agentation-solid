@@ -27,7 +27,9 @@
     "build": "tsup",
     "watch": "tsup --watch",
     "dev": "pnpm build && pnpm watch",
-    "prepublishOnly": "pnpm build"
+    "ship": "npm version patch --no-git-tag-version && pnpm build && npm publish --access public",
+    "ship:minor": "npm version minor --no-git-tag-version && pnpm build && npm publish --access public",
+    "ship:major": "npm version major --no-git-tag-version && pnpm build && npm publish --access public"
   },
   "peerDependencies": {
     "solid-js": ">=1.8.0"
