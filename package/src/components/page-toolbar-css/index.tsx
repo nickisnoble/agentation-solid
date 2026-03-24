@@ -306,21 +306,21 @@ export function PageFeedbackToolbarCSS(props: PageFeedbackToolbarCSSProps = {}) 
   const [isToolbarHidden, setIsToolbarHidden] = createSignal(loadToolbarHidden());
   const [isToolbarHiding, setIsToolbarHiding] = createSignal(false);
 
-  // Stop native events from bubbling past document.body when they originate
-  // inside the toolbar portal. Without this, clicks on the toolbar propagate to
-  // document-level listeners, triggering "click outside" handlers that close
-  // modals, dropdowns, and drawers.
+  // Mark events that originate inside the toolbar portal so app-level
+  // "click outside" handlers can ignore them. We avoid stopPropagation()
+  // because SolidJS delegates events to `document` — stopping propagation
+  // at `document.body` would break all delegated handlers inside the portal.
   let portalWrapperRef: HTMLDivElement | undefined;
   onMount(() => {
-    const stop = (e: Event) => {
+    const mark = (e: Event) => {
       if (portalWrapperRef && portalWrapperRef.contains(e.target as Node)) {
-        e.stopPropagation();
+        (e as any).__agentationInternal = true;
       }
     };
     const events = ["mousedown", "click", "pointerdown"] as const;
-    events.forEach((evt) => document.body.addEventListener(evt, stop));
+    events.forEach((evt) => document.body.addEventListener(evt, mark, true));
     onCleanup(() => {
-      events.forEach((evt) => document.body.removeEventListener(evt, stop));
+      events.forEach((evt) => document.body.removeEventListener(evt, mark, true));
     });
   });
 

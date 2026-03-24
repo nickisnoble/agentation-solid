@@ -14,6 +14,8 @@ npm install agentation-solid -D
 
 ## Usage
 
+### Client-side only (Vite + SolidJS)
+
 ```tsx
 import { Agentation } from 'agentation-solid';
 import { Show } from 'solid-js';
@@ -29,6 +31,26 @@ function App() {
   );
 }
 ```
+
+### SSR frameworks (TanStack Start, SolidStart, etc.)
+
+Works out of the box — same usage as above. The `Agentation` component automatically detects SSR hydration and defers mounting until after hydration completes.
+
+### Vite config
+
+The package ships uncompiled `.jsx` via the `solid` export condition so your project's `vite-plugin-solid` can compile it. Vite's esbuild-based dependency optimizer cannot handle SolidJS JSX, so you must exclude this package:
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  plugins: [/* ... */],
+  optimizeDeps: {
+    exclude: ['agentation-solid'],
+  },
+});
+```
+
+Without this, you'll see: *"The dependency might be incompatible with the dep optimizer."*
 
 The toolbar appears in the bottom-right corner. Click to activate, then click any element to annotate it.
 
@@ -131,6 +153,7 @@ Agentation captures class names, selectors, and element positions so AI agents c
 ## Requirements
 
 - SolidJS 1.8+
+- Vite with `vite-plugin-solid`
 - Desktop browser (mobile not supported)
 
 ## Docs

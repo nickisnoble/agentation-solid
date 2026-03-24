@@ -62,7 +62,7 @@ export function AnnotationMarker(props: AnnotationMarkerProps) {
       data-annotation-marker
       style={{
         left: `${props.annotation.x}%`,
-        top: props.annotation.y,
+        top: `${props.annotation.y}px`,
         "background-color": showDeleteHover() ? undefined : markerColor(),
         "animation-delay": animationDelay(),
       }}
@@ -138,7 +138,7 @@ export function PendingMarker(props: PendingMarkerProps) {
       class={`${styles.marker} ${styles.pending} ${props.isMultiSelect ? styles.multiSelect : ""} ${props.isExiting ? styles.exit : styles.enter}`}
       style={{
         left: `${props.x}%`,
-        top: props.y,
+        top: `${props.y}px`,
         "background-color": props.isMultiSelect
           ? "var(--agentation-color-green)"
           : "var(--agentation-color-accent)",
@@ -166,7 +166,7 @@ export function ExitingMarker(props: ExitingMarkerProps) {
       data-annotation-marker
       style={{
         left: `${props.annotation.x}%`,
-        top: props.annotation.y,
+        top: `${props.annotation.y}px`,
       }}
     >
       <IconXmark size={isMulti() ? 12 : 10} />

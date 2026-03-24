@@ -1,7 +1,17 @@
 {
   "name": "agentation-solid",
-  "version": "0.1.2",
-  "description": "Visual feedback for AI coding agents — SolidJS edition",
+  "version": "0.1.3",
+  "description": "Visual feedback for AI coding agents — SolidJS edition. Requires optimizeDeps.exclude in Vite config; see README for SSR setup.",
+  "keywords": [
+    "solidjs",
+    "solid",
+    "ai",
+    "agent",
+    "feedback",
+    "annotation",
+    "devtools",
+    "vite"
+  ],
   "sideEffects": false,
   "license": "PolyForm-Shield-1.0.0",
   "main": "./dist/server.cjs",
