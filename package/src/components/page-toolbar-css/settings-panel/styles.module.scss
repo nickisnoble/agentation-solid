@@ -67,8 +67,7 @@
 
 .settingsPanel {
   position: absolute;
-  right: 50%;
-  transform: translateX(50%);
+  right: 5px;
   bottom: calc(100% + 0.5rem);
   z-index: 1;
   overflow: hidden;
@@ -128,7 +127,7 @@
 
   &.enter {
     opacity: 1;
-    transform: translateX(50%) translateY(0) scale(1);
+    transform: translateY(0) scale(1);
     filter: blur(0px);
     transition:
       opacity 0.2s ease,
@@ -138,7 +137,7 @@
 
   &.exit {
     opacity: 0;
-    transform: translateX(50%) translateY(8px) scale(0.95);
+    transform: translateY(8px) scale(0.95);
     filter: blur(5px);
     pointer-events: none;
     transition:
@@ -238,6 +237,7 @@
   font-weight: 600;
   letter-spacing: -0.0094em;
   color: #fff;
+  text-decoration: none;
 }
 
 .settingsBrandSlash {
@@ -752,7 +752,7 @@
     }
 
     .settingsBrand {
-      color: rgba(0, 0, 0, 0.85);
+      color: #E5484D;
     }
 
     .settingsVersion {

@@ -24,14 +24,17 @@
 // Only reset cosmetic properties that global CSS commonly overrides —
 // avoid `all: unset` which also nukes layout props (box-sizing,
 // appearance, line-height) that component styles don't re-set.
-.toolbar :where(button, input, select, textarea, label) {
+.controlsContent :where(button, input, select, textarea, label) {
   background: unset;
   border: unset;
   border-radius: unset;
   padding: unset;
   margin: unset;
   color: unset;
-  font: unset;
+  font-family: unset;
+  font-weight: unset;
+  font-style: unset;
+  line-height: unset;
   letter-spacing: unset;
   text-transform: unset;
   text-decoration: unset;
@@ -171,7 +174,9 @@
 
 .toolbar {
   position: fixed;
-  width: 297px;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  width: 337px;
   z-index: 100000;
   font-family:
     system-ui,
@@ -249,10 +254,10 @@
     height: 44px;
     border-radius: 1.5rem;
     padding: 0.375rem;
-    width: 257px;
+    width: 297px;
 
     &.serverConnected {
-      width: 297px;
+      width: 337px;
     }
   }
 }
@@ -887,6 +892,27 @@
 
   > * {
     pointer-events: auto;
+  }
+}
+
+// =============================================================================
+// Draw Canvas
+// =============================================================================
+
+.drawCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 99996; // Below markers (99998) and overlay (99997)
+  // !important needed to override .overlay > * { pointer-events: auto }
+  pointer-events: none !important;
+
+  &.active {
+    pointer-events: auto !important;
+    cursor: crosshair !important;
+
+    &[data-stroke-hover] {
+      cursor: pointer !important;
+    }
   }
 }
 
