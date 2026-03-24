@@ -54,14 +54,21 @@ export function generateOutput(
   output += "\n";
 
   annotations.forEach((a, i) => {
+    // Use component name as heading when available, fall back to element name
+    const heading = a.reactComponents || a.element;
+    // Location: prepend component path to DOM path when available
+    const location = a.reactComponents
+      ? `${a.reactComponents} > ${a.elementPath}`
+      : a.elementPath;
+
     if (detailLevel === "compact") {
-      output += `${i + 1}. **${a.element}**${a.sourceFile ? ` (${a.sourceFile})` : ""}: ${a.comment}`;
+      output += `${i + 1}. **${heading}**${a.sourceFile ? ` (${a.sourceFile})` : ""}: ${a.comment}`;
       if (a.selectedText) {
         output += ` (re: "${a.selectedText.slice(0, 30)}${a.selectedText.length > 30 ? "..." : ""}")`;
       }
       output += "\n";
     } else if (detailLevel === "forensic") {
-      output += `### ${i + 1}. ${a.element}\n`;
+      output += `### ${i + 1}. ${heading}\n`;
       if (a.isMultiSelect && a.fullPath) {
         output += `*Forensic data shown for first element of selection*\n`;
       }
@@ -93,19 +100,13 @@ export function generateOutput(
       if (a.sourceFile) {
         output += `**Source:** ${a.sourceFile}\n`;
       }
-      if (a.reactComponents) {
-        output += `**React:** ${a.reactComponents}\n`;
-      }
       output += `**Feedback:** ${a.comment}\n\n`;
     } else {
       // standard and detailed
-      output += `### ${i + 1}. ${a.element}\n`;
-      output += `**Location:** ${a.elementPath}\n`;
+      output += `### ${i + 1}. ${heading}\n`;
+      output += `**Location:** ${location}\n`;
       if (a.sourceFile) {
         output += `**Source:** ${a.sourceFile}\n`;
-      }
-      if (a.reactComponents) {
-        output += `**React:** ${a.reactComponents}\n`;
       }
       if (detailLevel === "detailed") {
         if (a.cssClasses) {

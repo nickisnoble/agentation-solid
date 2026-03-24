@@ -1,7 +1,14 @@
 // =============================================================================
 // Solid Component Name Detection
-// Uses Solid's dev-mode owner tree to extract component names from DOM elements
+// Uses Solid's dev-mode owner tree to extract component names from DOM elements.
+//
+// SolidJS (unlike React) does NOT attach owner/fiber info to DOM elements.
+// Instead, component computations in the owner tree store their rendered DOM
+// in `value`/`tValue`. We walk the owner tree from a captured root to find
+// which components contain a given element.
 // =============================================================================
+
+import { DEV } from "solid-js";
 
 // =============================================================================
 // Default Filter Configuration
@@ -296,16 +303,77 @@ function shouldIncludeComponent(
 // =============================================================================
 
 /**
- * Solid's internal owner structure (dev mode only).
- * In development builds, Solid attaches reactive ownership info to track
- * component hierarchies. The exact shape varies between Solid versions.
+ * Solid's internal owner/computation structure (dev mode only).
+ * In dev builds, `devComponent` creates a computation with `name` set to the
+ * component function name, `component` set to the function itself, and
+ * `value`/`tValue` holding the rendered DOM output.
  */
 interface SolidOwner {
   name?: string;
   componentName?: string;
+  component?: Function;
   owner?: SolidOwner | null;
-  // Some versions use "parent" instead of "owner"
   parent?: SolidOwner | null;
+  owned?: SolidOwner[] | null;
+  sourceMap?: SolidOwner[];
+  value?: unknown;
+  tValue?: unknown;
+}
+
+// =============================================================================
+// Root Owner Management & Global Owner Tracking
+// =============================================================================
+
+let rootOwner: SolidOwner | null = null;
+
+// Flat set of all component owners across ALL render roots.
+// Populated via DEV.hooks.afterCreateOwner (installed at module load).
+const trackedComponentOwners = new Set<SolidOwner>();
+
+let ownerTrackingInstalled = false;
+
+/**
+ * Install a hook on Solid's DEV.hooks.afterCreateOwner to track every
+ * component owner that gets created — including in separate render() roots.
+ * Safe to call multiple times (idempotent).
+ */
+export function initOwnerTracking(): void {
+  if (ownerTrackingInstalled || typeof window === "undefined") return;
+  ownerTrackingInstalled = true;
+
+  try {
+    // DEV is only defined in development builds of solid-js
+    if (!DEV?.hooks) return;
+
+    const prev = DEV.hooks.afterCreateOwner;
+    DEV.hooks.afterCreateOwner = (owner: any) => {
+      // name/component are set by devComponent AFTER createComputation returns,
+      // so defer the check to let those fields be populated
+      queueMicrotask(() => {
+        if (owner && owner.component && owner.name) {
+          trackedComponentOwners.add(owner as SolidOwner);
+        }
+      });
+      if (typeof prev === "function") prev(owner);
+    };
+  } catch (err) {
+    console.warn("[agentation] initOwnerTracking error:", err);
+  }
+}
+
+/**
+ * Store a reference to the Solid root owner for tree-walk detection.
+ * Call this during agentation init (e.g. from a captured `getOwner()`).
+ */
+export function setRootOwner(owner: unknown): void {
+  if (owner && typeof owner === "object") {
+    // Walk up to find the true root
+    let current = owner as SolidOwner;
+    while (current.owner && typeof current.owner === "object") {
+      current = current.owner;
+    }
+    rootOwner = current;
+  }
 }
 
 // =============================================================================
@@ -322,49 +390,8 @@ let solidDetectionCache: boolean | null = null;
 let componentCacheAll = new WeakMap<HTMLElement, SolidComponentInfo>();
 
 /**
- * Check if an element has Solid-specific owner keys.
- * In dev mode, Solid attaches ownership properties to DOM nodes.
- */
-function hasSolidOwner(element: Element): boolean {
-  try {
-    const keys = Object.keys(element);
-    // Check for known Solid internal property patterns
-    if (
-      keys.some(
-        (key) =>
-          key === "__$owner" ||
-          key.startsWith("__solid") ||
-          key.startsWith("__owner"),
-      )
-    ) {
-      return true;
-    }
-
-    // Check Symbol properties as well (Solid may use symbols)
-    const symbols = Object.getOwnPropertySymbols(element);
-    if (
-      symbols.some((sym) => {
-        const desc = sym.description || String(sym);
-        return (
-          desc.includes("solid") ||
-          desc.includes("owner") ||
-          desc.includes("SOLID")
-        );
-      })
-    ) {
-      return true;
-    }
-  } catch {
-    // Property access may fail in edge cases
-  }
-
-  return false;
-}
-
-/**
  * Checks if Solid is present on the page.
- * Scans common root containers since Solid typically mounts
- * to #root, #app, etc.
+ * Uses multiple detection strategies including globals and root owner.
  */
 export function isSolidPage(): boolean {
   if (solidDetectionCache !== null) {
@@ -375,33 +402,26 @@ export function isSolidPage(): boolean {
     return false;
   }
 
-  // Check body first (some apps mount directly to body)
-  if (document.body && hasSolidOwner(document.body)) {
+  // Check if we have a captured root owner (most reliable)
+  if (rootOwner) {
     solidDetectionCache = true;
     return true;
   }
 
-  // Check common root containers
-  const commonRoots = ["#root", "#app", "[data-solid-root]"];
-  for (const selector of commonRoots) {
-    const el = document.querySelector(selector);
-    if (el && hasSolidOwner(el)) {
+  // Check for Solid's global marker (set by solid-js dev.js)
+  try {
+    if (
+      typeof globalThis !== "undefined" &&
+      (globalThis as Record<string, unknown>).Solid$$
+    ) {
       solidDetectionCache = true;
       return true;
     }
+  } catch {
+    // Ignore access errors
   }
 
-  // Scan immediate children of body as fallback
-  if (document.body) {
-    for (const child of document.body.children) {
-      if (hasSolidOwner(child)) {
-        solidDetectionCache = true;
-        return true;
-      }
-    }
-  }
-
-  // Check for Solid-specific globals that indicate a Solid app
+  // Check for Solid DevTools hook
   try {
     if (
       typeof window !== "undefined" &&
@@ -414,7 +434,39 @@ export function isSolidPage(): boolean {
     // Ignore access errors
   }
 
+  // Check DOM elements for owner properties (legacy fallback)
+  if (document.body) {
+    for (const child of document.body.children) {
+      if (hasOwnerProperty(child)) {
+        solidDetectionCache = true;
+        return true;
+      }
+    }
+  }
+
   solidDetectionCache = false;
+  return false;
+}
+
+/**
+ * Check if an element has any owner-like properties (legacy detection)
+ */
+function hasOwnerProperty(element: Element): boolean {
+  try {
+    const keys = Object.keys(element);
+    if (
+      keys.some(
+        (key) =>
+          key === "__$owner" ||
+          key.startsWith("__solid") ||
+          key.startsWith("__owner"),
+      )
+    ) {
+      return true;
+    }
+  } catch {
+    // Property access may fail
+  }
   return false;
 }
 
@@ -427,20 +479,111 @@ export function clearSolidDetectionCache(): void {
   componentCacheAll = new WeakMap<HTMLElement, SolidComponentInfo>();
 }
 
+// =============================================================================
+// Owner Tree Walking
+// =============================================================================
+
 /**
- * Attempt to extract the Solid owner from a DOM element.
- * Tries multiple known property patterns across Solid versions.
+ * Check if an owner's rendered DOM output contains or equals the target element
+ */
+function ownerContainsElement(owner: SolidOwner, target: HTMLElement): boolean {
+  let dom = owner.tValue !== undefined ? owner.tValue : owner.value;
+  if (!dom) return false;
+
+  // SolidJS (especially with solid-refresh HMR) may store a signal accessor
+  // rather than the DOM node directly. Call it to resolve the actual value.
+  if (typeof dom === "function") {
+    try {
+      dom = (dom as Function)();
+    } catch {
+      return false;
+    }
+  }
+
+  if (!dom) return false;
+
+  if (dom instanceof Node) {
+    return dom === target || dom.contains(target);
+  }
+
+  if (Array.isArray(dom)) {
+    for (const item of dom) {
+      if (item instanceof Node && (item === target || item.contains(target))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Walk the owner tree from root, collecting component owners that contain
+ * the target element. Results are ordered outermost → innermost.
+ */
+function collectComponentsFromTree(
+  root: SolidOwner,
+  target: HTMLElement,
+  config: ResolvedConfig,
+  domClasses?: Set<string>,
+): string[] {
+  const components: string[] = [];
+  const visited = new WeakSet<SolidOwner>();
+  let depth = 0;
+
+  function walk(owner: SolidOwner): void {
+    if (
+      components.length >= config.maxComponents ||
+      depth >= config.maxDepth ||
+      visited.has(owner)
+    ) {
+      return;
+    }
+    visited.add(owner);
+
+    if (owner.component) {
+      const rawName = owner.name || owner.componentName;
+      if (rawName && typeof rawName === "string") {
+        const name = rawName.replace(/^\[solid-refresh\]/, "");
+        if (
+          !isMinifiedName(name) &&
+          ownerContainsElement(owner, target) &&
+          shouldIncludeComponent(name, depth, config, domClasses)
+        ) {
+          components.push(name);
+        }
+      }
+    }
+
+    depth++;
+    if (owner.owned) {
+      for (const child of owner.owned) {
+        if (child && typeof child === "object") {
+          walk(child);
+        }
+      }
+    }
+    depth--;
+  }
+
+  walk(root);
+  return components;
+}
+
+/**
+ * Attempt to extract the Solid owner from a DOM element directly.
+ * Fallback for environments that stamp owner info on elements.
  */
 function getOwnerFromElement(element: HTMLElement): SolidOwner | null {
   try {
     const record = element as unknown as Record<string | symbol, unknown>;
 
-    // Approach 1: Check for __$owner (common in Solid dev mode)
+    // Check for __$owner (some Solid tooling attaches this)
     if (record.__$owner && typeof record.__$owner === "object") {
       return record.__$owner as SolidOwner;
     }
 
-    // Approach 2: Check string keys matching Solid patterns
+    // Check string keys matching Solid patterns
     const keys = Object.keys(element);
     for (const key of keys) {
       if (
@@ -451,7 +594,6 @@ function getOwnerFromElement(element: HTMLElement): SolidOwner | null {
         const value = record[key];
         if (value && typeof value === "object") {
           const candidate = value as Record<string, unknown>;
-          // Verify it looks like an owner (has name or owner/parent chain)
           if (
             "name" in candidate ||
             "componentName" in candidate ||
@@ -464,7 +606,7 @@ function getOwnerFromElement(element: HTMLElement): SolidOwner | null {
       }
     }
 
-    // Approach 3: Check Symbol properties
+    // Check Symbol properties
     const symbols = Object.getOwnPropertySymbols(element);
     for (const sym of symbols) {
       const desc = sym.description || String(sym);
@@ -498,16 +640,12 @@ function getOwnerFromElement(element: HTMLElement): SolidOwner | null {
  * Extract the component name from a Solid owner node.
  */
 function getNameFromOwner(owner: SolidOwner): string | null {
-  // Prefer componentName if set explicitly
   if (owner.componentName && typeof owner.componentName === "string") {
     return owner.componentName;
   }
-
-  // Fall back to name property
   if (owner.name && typeof owner.name === "string") {
     return owner.name;
   }
-
   return null;
 }
 
@@ -550,11 +688,12 @@ function isMinifiedName(name: string): boolean {
 }
 
 /**
- * Walks up the owner tree to collect Solid component names
+ * Finds Solid component names for a DOM element.
  *
- * @param element - The DOM element to start from
- * @param config - Optional configuration
- * @returns SolidComponentInfo with component path and array
+ * Primary strategy: walk the captured root owner tree and find component
+ * owners whose rendered DOM contains the target element.
+ * Fallback: check for owner properties directly on the element (for
+ * environments with Solid DevTools or similar tooling).
  */
 export function getSolidComponentName(
   element: HTMLElement,
@@ -562,9 +701,6 @@ export function getSolidComponentName(
 ): SolidComponentInfo {
   const resolved = resolveConfig(config);
 
-  // Only use cache for 'all' mode - filtered modes must NOT cache because:
-  // - Cache lookup happens BEFORE filtering logic runs
-  // - Cached results from before filter updates would bypass new filters
   const useCache = resolved.mode === "all";
 
   if (useCache) {
@@ -582,42 +718,87 @@ export function getSolidComponentName(
     return result;
   }
 
-  // Collect DOM classes for smart mode
   const domClasses =
     resolved.mode === "smart" ? getAncestorClasses(element) : undefined;
 
-  const components: string[] = [];
+  let components: string[] = [];
 
-  try {
-    let owner = getOwnerFromElement(element);
-    let depth = 0;
+  // Strategy 1: walk the root owner tree (catches main-tree components)
+  if (rootOwner) {
+    try {
+      components = collectComponentsFromTree(
+        rootOwner,
+        element,
+        resolved,
+        domClasses,
+      );
+    } catch {
+      // Tree walk may fail on complex/circular owner structures
+    }
+  }
 
-    while (
-      owner &&
-      depth < resolved.maxDepth &&
-      components.length < resolved.maxComponents
-    ) {
-      const name = getNameFromOwner(owner);
-
-      // Skip minified names and apply filter
-      if (
-        name &&
-        !isMinifiedName(name) &&
-        shouldIncludeComponent(name, depth, resolved, domClasses)
-      ) {
-        components.push(name);
+  // Strategy 2: check tracked component owners from DEV hooks
+  // (catches components in separate render() roots like client-only islands)
+  if (components.length === 0 && trackedComponentOwners.size > 0) {
+    try {
+      const matches: { name: string; depth: number }[] = [];
+      for (const owner of trackedComponentOwners) {
+        if (ownerContainsElement(owner, element)) {
+          const rawName = owner.name || owner.componentName;
+          if (rawName && typeof rawName === "string") {
+            // Strip vite HMR wrapper prefix: "[solid-refresh]Foo" → "Foo"
+            const name = rawName.replace(/^\[solid-refresh\]/, "");
+            if (
+              !isMinifiedName(name) &&
+              shouldIncludeComponent(name, 0, resolved, domClasses)
+            ) {
+              let depth = 0;
+              let p: SolidOwner | null | undefined = owner.owner;
+              while (p && depth < 50) {
+                depth++;
+                p = p.owner || p.parent;
+              }
+              matches.push({ name, depth });
+            }
+          }
+        }
       }
+      matches.sort((a, b) => a.depth - b.depth);
+      components = matches
+        .slice(0, resolved.maxComponents)
+        .map((m) => m.name);
+    } catch {
+      // Tracked owner query may fail
+    }
+  }
 
-      owner = getParentOwner(owner);
-      depth++;
+  // Strategy 3: try element-based owner lookup (for DevTools etc.)
+  if (components.length === 0) {
+    try {
+      let owner = getOwnerFromElement(element);
+      let depth = 0;
+
+      while (
+        owner &&
+        depth < resolved.maxDepth &&
+        components.length < resolved.maxComponents
+      ) {
+        const name = getNameFromOwner(owner);
+
+        if (
+          name &&
+          !isMinifiedName(name) &&
+          shouldIncludeComponent(name, depth, resolved, domClasses)
+        ) {
+          components.push(name);
+        }
+
+        owner = getParentOwner(owner);
+        depth++;
+      }
+    } catch {
+      // Element-based lookup may fail
     }
-  } catch {
-    // Owner structure may be corrupted or inaccessible - return empty result
-    const result: SolidComponentInfo = { path: null, components: [] };
-    if (useCache) {
-      componentCacheAll.set(element, result);
-    }
-    return result;
   }
 
   if (components.length === 0) {
@@ -628,12 +809,8 @@ export function getSolidComponentName(
     return result;
   }
 
-  // Build path from outermost to innermost: <App> <Layout> <Button>
-  const path = components
-    .slice()
-    .reverse()
-    .map((c) => `<${c}>`)
-    .join(" ");
+  // Build path: outermost → innermost: <App> <Layout> <Button>
+  const path = components.map((c) => `<${c}>`).join(" ");
 
   const result: SolidComponentInfo = { path, components };
   if (useCache) {

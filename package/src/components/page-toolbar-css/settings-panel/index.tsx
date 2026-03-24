@@ -75,7 +75,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
 
           <div class={styles.divider}></div>
 
-          {/* Output detail + React toggle */}
+          {/* Output detail + Component tree toggle */}
           <div class={styles.settingsSection}>
             <div class={styles.settingsRow}>
               <div class={styles.settingsLabel}>
@@ -118,12 +118,12 @@ export function SettingsPanel(props: SettingsPanelProps) {
               class={`${styles.settingsRow} ${styles.settingsRowMarginTop} ${!props.isDevMode ? styles.settingsRowDisabled : ""}`}
             >
               <div class={styles.settingsLabel}>
-                React Components
+                Solid Components
                 <HelpTooltip
                   content={
                     !props.isDevMode
                       ? "Disabled — production builds minify component names, making detection unreliable. Use in development mode."
-                      : "Include React component names in annotations"
+                      : "Include SolidJS component names in annotations"
                   }
                 />
               </div>

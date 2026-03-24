@@ -115,6 +115,7 @@ export default defineConfig((config) => {
     define: {
       ...tsupOptions.define,
       __VERSION__: JSON.stringify(VERSION),
+      __DEV_MODE__: "import.meta.env.DEV",
     },
   }));
 });

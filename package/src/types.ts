@@ -20,8 +20,8 @@ export type Annotation = {
   accessibility?: string;
   isMultiSelect?: boolean; // true if created via drag selection
   isFixed?: boolean; // true if element has fixed/sticky positioning (marker stays fixed)
-  reactComponents?: string; // React component hierarchy (e.g. "<App> <Dashboard> <Button>")
-  sourceFile?: string; // Source file path from React _debugSource (dev mode only, e.g. "src/Button.tsx:42")
+  reactComponents?: string; // Component hierarchy (e.g. "<App> <Dashboard> <Button>")
+  sourceFile?: string; // Source file path (dev mode only, e.g. "src/Button.tsx:42")
   elementBoundingBoxes?: Array<{
     x: number;
     y: number;

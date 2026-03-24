@@ -15,9 +15,10 @@
 // CSS-only version (default - zero runtime deps)
 export { PageFeedbackToolbarCSS } from "./components/page-toolbar-css";
 
-import { sharedConfig, onMount, onCleanup } from "solid-js";
+import { sharedConfig, onMount, onCleanup, getOwner } from "solid-js";
 import { render } from "solid-js/web";
 import { PageFeedbackToolbarCSS } from "./components/page-toolbar-css";
+import { setRootOwner, initOwnerTracking } from "./utils/solid-detection";
 import type { AgentationProps } from "./components/page-toolbar-css";
 
 /**
@@ -29,6 +30,13 @@ import type { AgentationProps } from "./components/page-toolbar-css";
  * separate SolidJS root via setTimeout to escape the hydration batch.
  */
 export function Agentation(props: AgentationProps = {}) {
+  // Set up component name detection
+  initOwnerTracking();
+  const currentOwner = getOwner();
+  if (currentOwner) {
+    setRootOwner(currentOwner);
+  }
+
   // Not hydrating — render inline (normal client-side path)
   if (!sharedConfig.context) {
     return PageFeedbackToolbarCSS(props) as any;

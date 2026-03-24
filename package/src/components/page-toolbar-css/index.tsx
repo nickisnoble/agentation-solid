@@ -154,11 +154,14 @@ const isValidUrl = (url: string): boolean => {
   }
 };
 
-// Maps output detail level to React detection mode
+// Maps output detail level to component detection mode.
+// "smart" mode (DOM class correlation) was designed for React's deep fiber trees
+// and is too aggressive for SolidJS's tracked-owner approach where every match
+// is already verified via DOM containment. Use "filtered" for all active modes.
 const OUTPUT_TO_REACT_MODE: Record<OutputDetailLevel, ReactComponentMode> = {
   compact: "off",
   standard: "filtered",
-  detailed: "smart",
+  detailed: "filtered",
   forensic: "all",
 };
 
@@ -464,7 +467,7 @@ export function PageFeedbackToolbarCSS(props: PageFeedbackToolbarCSSProps = {}) 
   }
 
   // Check if running in development mode - component detection only works in development mode
-  const isDevMode = process.env.NODE_ENV === "development";
+  const isDevMode = typeof __DEV_MODE__ !== "undefined" ? __DEV_MODE__ : process.env.NODE_ENV === "development";
 
   // Effective component mode - derived from outputDetail when enabled
   const effectiveReactMode = (): ReactComponentMode =>
