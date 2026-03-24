@@ -1,10 +1,10 @@
-<img src="https://raw.githubusercontent.com/benjitaylor/agentation/main/package/logo.svg" alt="Agentation" width="50" />
+<img src="https://raw.githubusercontent.com/njesenberger/agentation-solid/main/package/logo.svg" alt="Agentation" width="50" />
 
 # agentation-solid
 
-**[Agentation](https://agentation.dev)** for SolidJS. An agent-agnostic visual feedback tool. Click elements on your page, add notes, and copy structured output that helps AI coding agents find the exact code you're referring to.
+An unofficial SolidJS port of **[Agentation](https://agentation.dev)** — an agent-agnostic visual feedback tool. Click elements on your page, add notes, and copy structured output that helps AI coding agents find the exact code you're referring to.
 
-This is a SolidJS port of [agentation](https://www.npmjs.com/package/agentation) with 99% identical UX and DX.
+99% identical UX and DX to the React original.
 
 ## Install
 
@@ -71,13 +71,11 @@ import { Agentation, type Annotation } from 'agentation-solid';
 
 function App() {
   const handleAnnotation = (annotation: Annotation) => {
-    // Structured data - no parsing needed
     console.log(annotation.element);      // "Button"
     console.log(annotation.elementPath);  // "body > div > button"
     console.log(annotation.boundingBox);  // { x, y, width, height }
     console.log(annotation.cssClasses);   // "btn btn-primary"
 
-    // Send to your agent, API, etc.
     sendToAgent(annotation);
   };
 
@@ -99,7 +97,7 @@ function App() {
 type Annotation = {
   id: string;
   x: number;                    // % of viewport width
-  y: number;                    // px from top of document (absolute) OR viewport (if isFixed)
+  y: number;                    // px from top of document
   comment: string;              // User's note
   element: string;              // e.g., "Button"
   elementPath: string;          // e.g., "body > div > button"
@@ -120,7 +118,7 @@ type Annotation = {
 };
 ```
 
-> **Note:** The `reactComponents` field name is preserved for compatibility with the [agentation-mcp](https://www.npmjs.com/package/agentation-mcp) server. It contains SolidJS component names when running in dev mode. See [agentation.dev/schema](https://agentation.dev/schema) for the complete schema.
+> **Note:** The `reactComponents` field name is preserved for compatibility with the [agentation-mcp](https://www.npmjs.com/package/agentation-mcp) server. It contains SolidJS component names when running in dev mode.
 
 ## MCP Server Compatibility
 
