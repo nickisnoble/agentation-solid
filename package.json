@@ -7,14 +7,10 @@
     "build": "pnpm --filter agentation-solid build",
     "example": "pnpm --filter agentation-solid-example dev",
     "pack": "cd package && pnpm pack",
-    "mcp": "pnpm --filter agentation-mcp start",
-    "publish:agentation": "pnpm --filter agentation-solid publish --access public",
-    "publish:mcp": "pnpm --filter agentation-mcp publish --access public",
-    "publish:all": "pnpm publish:agentation && pnpm publish:mcp"
+    "ship": "pnpm --filter agentation-solid ship"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
       "esbuild"
     ]
   }

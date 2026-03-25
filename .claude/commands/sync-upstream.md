@@ -2,6 +2,8 @@
 
 Pull the latest changes from the upstream React agentation repo and port them to SolidJS.
 
+**Before starting, read `CLAUDE.md` — the "Fork-Specific Patterns" section is the authoritative reference for what must be preserved.**
+
 ## Steps
 
 ### 1. Fetch upstream changes
@@ -33,6 +35,10 @@ Summarize the changes for me before proceeding. Group them by:
 - **Modified files** with a brief description of what changed
 - **Deleted files**
 
+**Ignore** changes to these upstream-only paths (we don't track them):
+- `mcp/` — we use upstream's MCP package directly
+- `package/example/` — our example app is entirely different (TanStack Start, not Next.js)
+
 ### 3. Apply changes file by file
 
 For each changed upstream file, apply the SolidJS conversion:
@@ -57,30 +63,65 @@ For each changed upstream file, apply the SolidJS conversion:
   - `onChange` on text inputs → `onInput`
   - `React.CSSProperties` → `JSX.CSSProperties`
   - `React.MouseEvent` → native `MouseEvent`
+  - Numeric inline style values → must add `px` suffix (SolidJS doesn't auto-append like React)
 
 **React-specific files** (react-detection.ts, source-location.ts):
 - If react-detection.ts changed, apply equivalent logic changes to our `solid-detection.ts`
 - If source-location.ts changed, check if new features can be adapted (most React fiber stuff won't apply)
 
 **CSS/SCSS files**:
-- Copy directly — no changes needed.
+- Copy directly, BUT replace any `darken()`, `lighten()`, or other Sass global built-in functions with pre-computed hex values (avoids Dart Sass 3.0 deprecation warnings).
 
 **generate-output.ts**:
 - Usually safe to copy directly, but verify it doesn't import new React-specific modules.
 
-### 4. Verify the port
+### 4. Preserve fork-specific patterns
+
+**CRITICAL**: These patterns exist only in our fork. Never overwrite them with upstream code.
+
+#### `package/src/index.tsx` — SSR wrapper
+- Do NOT replace with upstream's simple re-export (`index.ts`)
+- Our version wraps the toolbar with `sharedConfig.context` hydration detection
+- If upstream changes exports, update our wrapper to match the new exports
+
+#### `package/src/utils/solid-detection.ts` — Component detection
+- Do NOT replace with upstream's `react-detection.ts`
+- If upstream changes detection logic, port the equivalent concept here
+
+#### `design-mode/index.tsx` — Store + reconcile for placements
+- Preserve the `createStore` + `reconcile(props.placements, { key: "id" })` pattern
+- Preserve `<For each={store.placements}>` (not `props.placements`)
+- Preserve reactive function children: `{() => <Skeleton ...>}` (not IIFE `{(() => ...)()}`)
+- Preserve reactive annotation text: `{() => { ... }}` (not IIFE)
+
+#### `design-mode/rearrange.tsx` — Store + reconcile for sections
+- Preserve the `createStore` + `reconcile(props.rearrangeState.sections, { key: "id" })` pattern
+- Preserve `const sections = () => sectionStore.items`
+- Preserve reactive annotation text children
+
+#### `design-mode/skeletons.tsx` — px helper
+- Preserve the `px()` helper function at the top of the file
+- Any new skeleton renderers from upstream need all numeric style values converted to `px`-suffixed strings
+- `Bar`, `Block`, `Circle` base components already handle px — preserve their implementations
+
+#### `globals.d.ts`
+- Preserve the `__DEV_MODE__` declaration (not in upstream)
+
+### 5. Verify the port
 
 After applying changes:
 1. Run `cd package && pnpm build` — must compile with zero errors
 2. Check no React imports leaked in: `grep -r "from ['\"]react" package/src/`
 3. Check no `className` in JSX: `grep -r "className[={]" package/src/`
-4. Verify the `reactComponents` field name is preserved (MCP schema compat)
+4. Check no bare numeric style values in skeletons: `grep -E "gap: [0-9]|padding: [0-9]|margin.*: [0-9]|height: [0-9]|width: [0-9]" package/src/components/design-mode/skeletons.tsx` (should return nothing)
+5. Verify the `reactComponents` field name is preserved (MCP schema compat)
 
-### 5. Report
+### 6. Report
 
 Summarize what was synced:
 - List of upstream changes applied
 - Any changes that couldn't be ported (and why)
 - Any new features that need manual testing
+- Any new skeleton renderers that needed px conversion
 
 Do NOT commit automatically — let me review first.
