@@ -16,6 +16,10 @@ pnpm build      # Build package only
 pnpm ship       # Patch bump + build + publish
 ```
 
+## Version Control
+
+This repo uses **jj** (Jujutsu), not git. Use `jj` commands for all VCS operations.
+
 ## Important
 
 The npm package is public. Changes to `package/src/` affect all users.
