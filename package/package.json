@@ -1,6 +1,6 @@
 {
   "name": "agentation-solid",
-  "version": "0.1.4",
+  "version": "3.0.0",
   "description": "Visual feedback for AI coding agents — SolidJS edition. Requires optimizeDeps.exclude in Vite config; see README for SSR setup.",
   "keywords": [
     "solidjs",
@@ -79,6 +79,8 @@
     "build": "tsup",
     "watch": "tsup --watch",
     "dev": "pnpm build && pnpm watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "ship": "npm version patch --no-git-tag-version && pnpm build && npm publish --access public",
     "ship:minor": "npm version minor --no-git-tag-version && pnpm build && npm publish --access public",
     "ship:major": "npm version major --no-git-tag-version && pnpm build && npm publish --access public"
@@ -92,8 +94,10 @@
     }
   },
   "devDependencies": {
+    "@solidjs/testing-library": "^0.8.0",
     "@types/node": "^20.0.0",
     "esbuild-sass-plugin": "^3.6.0",
+    "jsdom": "^25.0.0",
     "postcss": "^8.5.6",
     "postcss-modules": "^6.0.1",
     "sass": "^1.97.2",
@@ -101,7 +105,8 @@
     "tsup": "^8.0.0",
     "tsup-preset-solid": "^2.2.0",
     "typescript": "^5.0.0",
-    "vite-plugin-solid": "^2.10.0"
+    "vite-plugin-solid": "^2.10.0",
+    "vitest": "^3.0.0"
   },
   "browser": {
     "./dist/server.js": "./dist/index.js",

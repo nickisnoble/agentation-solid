@@ -69,6 +69,12 @@ For each changed upstream file, apply the SolidJS conversion:
 - If react-detection.ts changed, apply equivalent logic changes to our `solid-detection.ts`
 - If source-location.ts changed, check if new features can be adapted (most React fiber stuff won't apply)
 
+**Test files** (`*.test.ts`, `*.test.tsx`):
+- Component tests: Port using the same conversions as component files. Use `@solidjs/testing-library` instead of `@testing-library/react`. Use `render(() => <Comp />)` syntax (factory function required by Solid testing library).
+- `react-detection.test.ts` changes → apply equivalent to `solid-detection.test.ts`. Mock owner trees instead of React fibers. Use `setRootOwner()` + `clearSolidDetectionCache()` for state management. Use detached DOM elements for Strategy 3 tests to avoid rootOwner leakage.
+- `source-location.test.ts` → Skip (source location is a stub in this fork).
+- New utility tests (framework-agnostic): Copy directly if they don't import React.
+
 **CSS/SCSS files**:
 - Copy directly, BUT replace any `darken()`, `lighten()`, or other Sass global built-in functions with pre-computed hex values (avoids Dart Sass 3.0 deprecation warnings).
 
@@ -115,6 +121,7 @@ After applying changes:
 3. Check no `className` in JSX: `grep -r "className[={]" package/src/`
 4. Check no bare numeric style values in skeletons: `grep -E "gap: [0-9]|padding: [0-9]|margin.*: [0-9]|height: [0-9]|width: [0-9]" package/src/components/design-mode/skeletons.tsx` (should return nothing)
 5. Verify the `reactComponents` field name is preserved (MCP schema compat)
+6. Run `cd package && pnpm test` — all tests must pass
 
 ### 6. Report
 
