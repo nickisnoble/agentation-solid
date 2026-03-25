@@ -114,7 +114,5 @@
   },
   "typesVersions": {},
   "type": "module",
-  "dependencies": {
-    "solid-transition-group": "^0.3.0"
-  }
+  "dependencies": {}
 }

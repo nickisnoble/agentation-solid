@@ -3389,20 +3389,24 @@ export function PageFeedbackToolbarCSS(props: PageFeedbackToolbarCSSProps = {}) 
           >
             {/* Morphing container */}
             <div
-              class={`${styles.toolbarContainer} ${isActive() ? styles.expanded : styles.collapsed} ${showEntranceAnimation() ? styles.entrance : ""} ${isToolbarHiding() ? styles.hiding : ""} ${!settings().webhooksEnabled && (isValidUrl(settings().webhookUrl) || isValidUrl(props.webhookUrl || "")) ? styles.serverConnected : ""}`}
-              onClick={
-                !isActive()
-                  ? (e: MouseEvent) => {
-                      // Don't activate if we just finished dragging
-                      if (justFinishedToolbarDragRef) {
-                        justFinishedToolbarDragRef = false;
-                        e.preventDefault();
-                        return;
-                      }
-                      setIsActive(true);
-                    }
-                  : undefined
-              }
+              class={styles.toolbarContainer}
+              classList={{
+                [styles.expanded]: isActive(),
+                [styles.collapsed]: !isActive(),
+                [styles.entrance]: showEntranceAnimation(),
+                [styles.hiding]: isToolbarHiding(),
+                [styles.serverConnected]: !settings().webhooksEnabled && (isValidUrl(settings().webhookUrl) || isValidUrl(props.webhookUrl || "")),
+              }}
+              onClick={(e: MouseEvent) => {
+                if (isActive()) return;
+                // Don't activate if we just finished dragging
+                if (justFinishedToolbarDragRef) {
+                  justFinishedToolbarDragRef = false;
+                  e.preventDefault();
+                  return;
+                }
+                setIsActive(true);
+              }}
               onMouseDown={handleToolbarMouseDown}
               role={!isActive() ? "button" : undefined}
               tabIndex={!isActive() ? 0 : -1}
@@ -3410,7 +3414,11 @@ export function PageFeedbackToolbarCSS(props: PageFeedbackToolbarCSSProps = {}) 
             >
               {/* Toggle content - visible when collapsed */}
               <div
-                class={`${styles.toggleContent} ${!isActive() ? styles.visible : styles.hidden}`}
+                class={styles.toggleContent}
+                classList={{
+                  [styles.visible]: !isActive(),
+                  [styles.hidden]: isActive(),
+                }}
               >
                 <IconListSparkle size={24} />
                 <Show when={hasVisibleAnnotations()}>
@@ -3424,11 +3432,14 @@ export function PageFeedbackToolbarCSS(props: PageFeedbackToolbarCSSProps = {}) 
 
               {/* Controls content - visible when expanded */}
               <div
-                class={`${styles.controlsContent} ${isActive() ? styles.visible : styles.hidden} ${
-                  toolbarPosition() && toolbarPosition()!.y < 100
-                    ? styles.tooltipBelow
-                    : ""
-                } ${tooltipsHidden() || showSettings() ? styles.tooltipsHidden : ""} ${tooltipSessionActive() ? styles.tooltipsInSession : ""}`}
+                class={styles.controlsContent}
+                classList={{
+                  [styles.visible]: isActive(),
+                  [styles.hidden]: !isActive(),
+                  [styles.tooltipBelow]: !!(toolbarPosition() && toolbarPosition()!.y < 100),
+                  [styles.tooltipsHidden]: tooltipsHidden() || showSettings(),
+                  [styles.tooltipsInSession]: tooltipSessionActive(),
+                }}
                 onMouseEnter={handleControlsMouseEnter}
                 onMouseLeave={handleControlsMouseLeave}
               >

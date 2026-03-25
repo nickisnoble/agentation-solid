@@ -1,6 +1,6 @@
 # Agentation Package
 
-This is the publishable npm package. Changes here affect everyone who installs `agentation`.
+This is the publishable npm package. Changes here affect everyone who installs `agentation-solid`.
 
 ## Critical Rules
 
@@ -22,10 +22,10 @@ This is the publishable npm package. Changes here affect everyone who installs `
 ## Main Export
 
 ```tsx
-import { Agentation } from 'agentation';
+import { Agentation } from 'agentation-solid';
 ```
 
-No external runtime dependencies beyond React.
+No external runtime dependencies beyond SolidJS.
 
 ## Programmatic API
 
@@ -60,7 +60,3 @@ When instructed to publish a new npm version:
 3. Commit the version bump
 4. Run `npm publish --access public` (will prompt for OTP)
 5. Push to main
-6. Update changelog in `example/src/app/changelog/page.tsx` (add new entry to `releases` array)
-7. Commit and push the changelog update
-
-Always analyze what changed since the last version to write accurate changelog entries.

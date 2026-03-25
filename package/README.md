@@ -65,7 +65,7 @@ The toolbar appears in the bottom-right corner. Click to activate, then click an
 - **Structured output** -- Copy markdown with selectors, positions, and context
 - **Programmatic access** -- Callback props for direct integration with tools
 - **Dark/light mode** -- Toggle in settings, persists to localStorage
-- **Zero dependencies** -- Pure CSS animations, no runtime libraries beyond SolidJS
+- **Zero runtime dependencies** -- Pure CSS animations, no libraries beyond SolidJS
 
 ## Props
 
