@@ -5,6 +5,7 @@ export function getRouter() {
   return createRouter({
     routeTree,
     scrollRestoration: true,
+    defaultNotFoundComponent: () => <p>Page not found</p>,
   });
 }
 

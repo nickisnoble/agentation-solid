@@ -117,5 +117,10 @@ export default defineConfig((config) => {
       __VERSION__: JSON.stringify(VERSION),
       __DEV_MODE__: "import.meta.env.DEV",
     },
+    esbuildOptions(options) {
+      tsupOptions.esbuildOptions?.(options, {} as any);
+      // Keep preserved JSX files under Babel's 500KB compact threshold
+      options.minifyWhitespace = true;
+    },
   }));
 });

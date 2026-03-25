@@ -1,6 +1,6 @@
 {
   "name": "agentation-solid",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Visual feedback for AI coding agents — SolidJS edition. Requires optimizeDeps.exclude in Vite config; see README for SSR setup.",
   "keywords": [
     "solidjs",
