@@ -10,13 +10,16 @@ import type { ComponentType } from "./types";
 
 type SkeletonProps = { width: number; height: number; text?: string };
 
+/** SolidJS doesn't auto-append px to numeric style values (React does). */
+const px = (v: number | string) => typeof v === "number" ? `${v}px` : v;
+
 function Bar({ w, h = 3, strong }: { w: number | string; h?: number; strong?: boolean }) {
   return (
     <div
       style={{
-        width: typeof w === "number" ? `${w}px` : w,
-        height: h,
-        "border-radius": 2,
+        width: px(w),
+        height: `${h}px`,
+        "border-radius": "2px",
         background: strong ? "var(--agd-bar-strong)" : "var(--agd-bar)",
         "flex-shrink": 0,
       }}
@@ -38,9 +41,9 @@ function Block({
   return (
     <div
       style={{
-        width: typeof w === "number" ? `${w}px` : w,
-        height: typeof h === "number" ? `${h}px` : h,
-        "border-radius": radius,
+        width: px(w),
+        height: px(h),
+        "border-radius": `${radius}px`,
         border: "1px dashed var(--agd-stroke)",
         background: "var(--agd-fill)",
         "flex-shrink": 0,
@@ -54,8 +57,8 @@ function Circle({ size }: { size: number }) {
   return (
     <div
       style={{
-        width: size,
-        height: size,
+        width: `${size}px`,
+        height: `${size}px`,
         "border-radius": "50%",
         border: "1px dashed var(--agd-stroke)",
         background: "var(--agd-fill)",
@@ -70,9 +73,9 @@ function Circle({ size }: { size: number }) {
 function NavigationSkeleton({ width, height }: SkeletonProps) {
   const pad = Math.max(8, height * 0.2);
   return (
-    <div style={{ display: "flex", "align-items": "center", height: "100%", padding: `0 ${pad}px`, gap: width * 0.02 }}>
+    <div style={{ display: "flex", "align-items": "center", height: "100%", padding: `0 ${pad}px`, gap: `${width * 0.02}px` }}>
       <Block w={Math.max(20, height * 0.5)} h={Math.max(12, height * 0.4)} radius={2} />
-      <div style={{ flex: 1, display: "flex", gap: width * 0.03, "margin-left": width * 0.04 }}>
+      <div style={{ flex: 1, display: "flex", gap: `${width * 0.03}px`, "margin-left": `${width * 0.04}px` }}>
         <Bar w={width * 0.06} />
         <Bar w={width * 0.07} />
         <Bar w={width * 0.05} />
@@ -85,15 +88,15 @@ function NavigationSkeleton({ width, height }: SkeletonProps) {
 
 function HeroSkeleton({ width, height, text }: SkeletonProps) {
   return (
-    <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: height * 0.05 }}>
+    <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: `${height * 0.05}px` }}>
       {text ? (
-        <span style={{ "font-size": Math.min(20, height * 0.08), "font-weight": 600, color: "var(--agd-text-3)", "text-align": "center", "max-width": "80%" }}>{text}</span>
+        <span style={{ "font-size": `${Math.min(20, height * 0.08)}px`, "font-weight": 600, color: "var(--agd-text-3)", "text-align": "center", "max-width": "80%" }}>{text}</span>
       ) : (
         <Bar w={width * 0.5} h={Math.max(6, height * 0.04)} strong />
       )}
       <Bar w={width * 0.6} />
       <Bar w={width * 0.4} />
-      <Block w={Math.min(140, width * 0.2)} h={Math.min(36, height * 0.12)} radius={6} style={{ "margin-top": height * 0.06 }} />
+      <Block w={Math.min(140, width * 0.2)} h={Math.min(36, height * 0.12)} radius={6} style={{ "margin-top": `${height * 0.06}px` }} />
     </div>
   );
 }
@@ -101,11 +104,11 @@ function HeroSkeleton({ width, height, text }: SkeletonProps) {
 function SidebarSkeleton({ width, height }: SkeletonProps) {
   const items = Math.max(3, Math.floor(height / 36));
   return (
-    <div style={{ padding: width * 0.08, display: "flex", "flex-direction": "column", gap: height * 0.03 }}>
+    <div style={{ padding: `${width * 0.08}px`, display: "flex", "flex-direction": "column", gap: `${height * 0.03}px` }}>
       <Bar w={width * 0.6} h={4} strong />
       <For each={Array.from({ length: items }, (_, i) => i)}>
         {(i) => (
-          <div style={{ display: "flex", "align-items": "center", gap: 6 }}>
+          <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
             <Block w={10} h={10} radius={2} />
             <Bar w={width * (0.4 + ((i * 17) % 30) / 100)} />
           </div>
@@ -118,10 +121,10 @@ function SidebarSkeleton({ width, height }: SkeletonProps) {
 function FooterSkeleton({ width, height }: SkeletonProps) {
   const cols = Math.max(2, Math.min(4, Math.floor(width / 160)));
   return (
-    <div style={{ display: "flex", padding: `${height * 0.12}px ${width * 0.03}px`, gap: width * 0.05 }}>
+    <div style={{ display: "flex", padding: `${height * 0.12}px ${width * 0.03}px`, gap: `${width * 0.05}px` }}>
       <For each={Array.from({ length: cols }, (_, i) => i)}>
         {(i) => (
-          <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 4 }}>
+          <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "4px" }}>
             <Bar w="60%" h={3} strong />
             <Bar w="80%" h={2} />
             <Bar w="70%" h={2} />
@@ -138,14 +141,14 @@ function ModalSkeleton({ width, height }: SkeletonProps) {
     <div style={{ height: "100%", display: "flex", "flex-direction": "column" }}>
       <div style={{ padding: "10px 12px", "border-bottom": "1px solid var(--agd-stroke)", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
         <Bar w={width * 0.3} h={4} strong />
-        <div style={{ width: 14, height: 14, border: "1px solid var(--agd-stroke)", "border-radius": 3 }} />
+        <div style={{ width: "14px", height: "14px", border: "1px solid var(--agd-stroke)", "border-radius": "3px" }} />
       </div>
-      <div style={{ flex: 1, padding: 12, display: "flex", "flex-direction": "column", gap: 6 }}>
+      <div style={{ flex: 1, padding: "12px", display: "flex", "flex-direction": "column", gap: "6px" }}>
         <Bar w="90%" />
         <Bar w="70%" />
         <Bar w="80%" />
       </div>
-      <div style={{ padding: "10px 12px", "border-top": "1px solid var(--agd-stroke)", display: "flex", "justify-content": "flex-end", gap: 8 }}>
+      <div style={{ padding: "10px 12px", "border-top": "1px solid var(--agd-stroke)", display: "flex", "justify-content": "flex-end", gap: "8px" }}>
         <Block w={70} h={26} radius={4} />
         <Block w={70} h={26} radius={4} style={{ background: "var(--agd-bar)" }} />
       </div>
@@ -157,7 +160,7 @@ function CardSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column" }}>
       <div style={{ height: "40%", background: "var(--agd-fill)", "border-bottom": "1px dashed var(--agd-stroke)" }} />
-      <div style={{ flex: 1, padding: 10, display: "flex", "flex-direction": "column", gap: 5 }}>
+      <div style={{ flex: 1, padding: "10px", display: "flex", "flex-direction": "column", gap: "5px" }}>
         <Bar w="70%" h={4} strong />
         <Bar w="95%" h={2} />
         <Bar w="85%" h={2} />
@@ -170,14 +173,14 @@ function CardSkeleton({ width, height }: SkeletonProps) {
 function TextSkeleton({ width, height, text }: SkeletonProps) {
   if (text) {
     return (
-      <div style={{ padding: 4, "font-size": Math.min(14, height * 0.3), "line-height": 1.5, color: "var(--agd-text-3)", "word-break": "break-word", overflow: "hidden" }}>
+      <div style={{ padding: "4px", "font-size": `${Math.min(14, height * 0.3)}px`, "line-height": 1.5, color: "var(--agd-text-3)", "word-break": "break-word", overflow: "hidden" }}>
         {text}
       </div>
     );
   }
   const lines = Math.max(2, Math.floor(height / 18));
   return (
-    <div style={{ display: "flex", "flex-direction": "column", gap: 6, padding: 4 }}>
+    <div style={{ display: "flex", "flex-direction": "column", gap: "6px", padding: "4px" }}>
       <Bar w={width * 0.6} h={5} strong />
       <For each={Array.from({ length: lines }, (_, i) => i)}>
         {(i) => (
@@ -230,10 +233,10 @@ function TableSkeleton({ width, height }: SkeletonProps) {
 function ListSkeleton({ width, height }: SkeletonProps) {
   const items = Math.max(2, Math.floor(height / 28));
   return (
-    <div style={{ display: "flex", "flex-direction": "column", gap: 4, padding: 4 }}>
+    <div style={{ display: "flex", "flex-direction": "column", gap: "4px", padding: "4px" }}>
       <For each={Array.from({ length: items }, (_, i) => i)}>
         {(i) => (
-          <div style={{ display: "flex", "align-items": "center", gap: 8, padding: "4px 0" }}>
+          <div style={{ display: "flex", "align-items": "center", gap: "8px", padding: "4px 0" }}>
             <Circle size={8} />
             <Bar w={`${55 + ((i * 17) % 35)}%`} h={2} />
           </div>
@@ -247,7 +250,7 @@ function ButtonSkeleton({ width, height, text }: SkeletonProps) {
   return (
     <div style={{
       height: "100%",
-      "border-radius": Math.min(8, height / 3),
+      "border-radius": `${Math.min(8, height / 3)}px`,
       border: "1px solid var(--agd-stroke)",
       background: "var(--agd-fill)",
       display: "flex",
@@ -255,7 +258,7 @@ function ButtonSkeleton({ width, height, text }: SkeletonProps) {
       "justify-content": "center",
     }}>
       {text ? (
-        <span style={{ "font-size": Math.min(13, height * 0.4), "font-weight": 500, color: "var(--agd-text-3)", "letter-spacing": "-0.01em" }}>{text}</span>
+        <span style={{ "font-size": `${Math.min(13, height * 0.4)}px`, "font-weight": 500, color: "var(--agd-text-3)", "letter-spacing": "-0.01em" }}>{text}</span>
       ) : (
         <Bar w={Math.max(20, width * 0.5)} h={3} strong />
       )}
@@ -265,16 +268,16 @@ function ButtonSkeleton({ width, height, text }: SkeletonProps) {
 
 function InputSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ display: "flex", "flex-direction": "column", gap: 4, height: "100%", "justify-content": "center" }}>
+    <div style={{ display: "flex", "flex-direction": "column", gap: "4px", height: "100%", "justify-content": "center" }}>
       <Bar w={Math.min(80, width * 0.3)} h={2} />
       <div style={{
-        height: Math.min(36, height * 0.6),
-        "border-radius": 4,
+        height: `${Math.min(36, height * 0.6)}px`,
+        "border-radius": "4px",
         border: "1px dashed var(--agd-stroke)",
         background: "var(--agd-fill)",
         display: "flex",
         "align-items": "center",
-        "padding-left": 8,
+        "padding-left": "8px",
       }}>
         <Bar w="40%" h={2} />
       </div>
@@ -285,16 +288,16 @@ function InputSkeleton({ width, height }: SkeletonProps) {
 function FormSkeleton({ width, height }: SkeletonProps) {
   const fields = Math.max(2, Math.min(5, Math.floor(height / 56)));
   return (
-    <div style={{ display: "flex", "flex-direction": "column", gap: height * 0.04, padding: 8 }}>
+    <div style={{ display: "flex", "flex-direction": "column", gap: `${height * 0.04}px`, padding: "8px" }}>
       <For each={Array.from({ length: fields }, (_, i) => i)}>
         {(i) => (
-          <div style={{ display: "flex", "flex-direction": "column", gap: 4 }}>
+          <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
             <Bar w={60 + ((i * 17) % 30)} h={2} />
             <Block w="100%" h={28} radius={4} />
           </div>
         )}
       </For>
-      <Block w={Math.min(120, width * 0.35)} h={30} radius={6} style={{ "margin-top": 8, "align-self": "flex-end", background: "var(--agd-bar)" }} />
+      <Block w={Math.min(120, width * 0.35)} h={30} radius={6} style={{ "margin-top": "8px", "align-self": "flex-end", background: "var(--agd-bar)" }} />
     </div>
   );
 }
@@ -303,7 +306,7 @@ function TabsSkeleton({ width, height }: SkeletonProps) {
   const tabCount = Math.max(2, Math.min(4, Math.floor(width / 120)));
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column" }}>
-      <div style={{ display: "flex", gap: 2, "border-bottom": "1px solid var(--agd-stroke)" }}>
+      <div style={{ display: "flex", gap: "2px", "border-bottom": "1px solid var(--agd-stroke)" }}>
         <For each={Array.from({ length: tabCount }, (_, i) => i)}>
           {(i) => (
             <div style={{ padding: "8px 12px", "border-bottom": i === 0 ? "2px solid var(--agd-bar-strong)" : "none" }}>
@@ -312,7 +315,7 @@ function TabsSkeleton({ width, height }: SkeletonProps) {
           )}
         </For>
       </div>
-      <div style={{ flex: 1, padding: 12, display: "flex", "flex-direction": "column", gap: 6 }}>
+      <div style={{ flex: 1, padding: "12px", display: "flex", "flex-direction": "column", gap: "6px" }}>
         <Bar w="80%" h={2} />
         <Bar w="65%" h={2} />
         <Bar w="75%" h={2} />
@@ -341,7 +344,7 @@ function BadgeSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{
       height: "100%",
-      "border-radius": height / 2,
+      "border-radius": `${height / 2}px`,
       border: "1px solid var(--agd-stroke)",
       background: "var(--agd-fill)",
       display: "flex",
@@ -355,7 +358,7 @@ function BadgeSkeleton({ width, height }: SkeletonProps) {
 
 function HeaderSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: height * 0.08 }}>
+    <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: `${height * 0.08}px` }}>
       <Bar w={width * 0.5} h={Math.max(5, height * 0.06)} strong />
       <Bar w={width * 0.35} />
     </div>
@@ -364,11 +367,11 @@ function HeaderSkeleton({ width, height }: SkeletonProps) {
 
 function SectionSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ display: "flex", "flex-direction": "column", height: "100%", gap: height * 0.04, padding: width * 0.04 }}>
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", gap: `${height * 0.04}px`, padding: `${width * 0.04}px` }}>
       <Bar w={width * 0.3} h={4} strong />
       <Bar w={width * 0.7} />
       <Bar w={width * 0.5} />
-      <div style={{ flex: 1, display: "flex", gap: width * 0.03, "margin-top": height * 0.06 }}>
+      <div style={{ flex: 1, display: "flex", gap: `${width * 0.03}px`, "margin-top": `${height * 0.06}px` }}>
         <Block w="33%" h="100%" radius={4} />
         <Block w="33%" h="100%" radius={4} />
         <Block w="33%" h="100%" radius={4} />
@@ -381,7 +384,7 @@ function GridSkeleton({ width, height }: SkeletonProps) {
   const cols = Math.max(2, Math.min(4, Math.floor(width / 140)));
   const rows = Math.max(1, Math.min(3, Math.floor(height / 120)));
   return (
-    <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, "grid-template-rows": `repeat(${rows}, 1fr)`, gap: 6, height: "100%" }}>
+    <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, "grid-template-rows": `repeat(${rows}, 1fr)`, gap: "6px", height: "100%" }}>
       <For each={Array.from({ length: cols * rows }, (_, i) => i)}>
         {(i) => (
           <Block w="100%" h="100%" radius={4} />
@@ -398,10 +401,10 @@ function DropdownSkeleton({ width, height }: SkeletonProps) {
       <div style={{ padding: "6px 8px", "border-bottom": "1px solid var(--agd-stroke)" }}>
         <Bar w={width * 0.5} h={3} strong />
       </div>
-      <div style={{ flex: 1, padding: 4, display: "flex", "flex-direction": "column", gap: 2 }}>
+      <div style={{ flex: 1, padding: "4px", display: "flex", "flex-direction": "column", gap: "2px" }}>
         <For each={Array.from({ length: items }, (_, i) => i)}>
           {(i) => (
-            <div style={{ padding: "4px 6px", "border-radius": 3, background: i === 0 ? "var(--agd-fill)" : "transparent" }}>
+            <div style={{ padding: "4px 6px", "border-radius": "3px", background: i === 0 ? "var(--agd-fill)" : "transparent" }}>
               <Bar w={`${50 + ((i * 17) % 35)}%`} h={2} strong={i === 0} />
             </div>
           )}
@@ -424,7 +427,7 @@ function ToggleSkeleton({ width, height }: SkeletonProps) {
 function SearchSkeleton({ width, height }: SkeletonProps) {
   const r = Math.min(height / 2, 20);
   return (
-    <div style={{ height: "100%", "border-radius": r, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: `0 ${r * 0.6}px`, gap: 6 }}>
+    <div style={{ height: "100%", "border-radius": `${r}px`, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: `0 ${r * 0.6}px`, gap: "6px" }}>
       <Circle size={Math.min(14, height * 0.4)} />
       <Bar w="50%" h={2} />
     </div>
@@ -433,13 +436,13 @@ function SearchSkeleton({ width, height }: SkeletonProps) {
 
 function ToastSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", "border-radius": 8, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 10px", gap: 8 }}>
+    <div style={{ height: "100%", "border-radius": "8px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 10px", gap: "8px" }}>
       <Circle size={Math.min(20, height * 0.5)} />
-      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 3 }}>
+      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "3px" }}>
         <Bar w="60%" h={3} strong />
         <Bar w="80%" h={2} />
       </div>
-      <div style={{ width: 14, height: 14, border: "1px solid var(--agd-stroke)", "border-radius": 3, "flex-shrink": 0 }} />
+      <div style={{ width: "14px", height: "14px", border: "1px solid var(--agd-stroke)", "border-radius": "3px", "flex-shrink": 0 }} />
     </div>
   );
 }
@@ -473,8 +476,8 @@ function VideoSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{ height: "100%", position: "relative", display: "flex", "align-items": "center", "justify-content": "center" }}>
       <Block w="100%" h="100%" radius={4} />
-      <div style={{ position: "absolute", width: btnR * 2, height: btnR * 2, "border-radius": "50%", border: "1.5px solid var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center" }}>
-        <div style={{ width: 0, height: 0, "border-left": `${btnR * 0.6}px solid var(--agd-bar-strong)`, "border-top": `${btnR * 0.4}px solid transparent`, "border-bottom": `${btnR * 0.4}px solid transparent`, "margin-left": btnR * 0.15 }} />
+      <div style={{ position: "absolute", width: `${btnR * 2}px`, height: `${btnR * 2}px`, "border-radius": "50%", border: "1.5px solid var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center" }}>
+        <div style={{ width: 0, height: 0, "border-left": `${btnR * 0.6}px solid var(--agd-bar-strong)`, "border-top": `${btnR * 0.4}px solid transparent`, "border-bottom": `${btnR * 0.4}px solid transparent`, "margin-left": `${btnR * 0.15}px` }} />
       </div>
     </div>
   );
@@ -483,10 +486,10 @@ function VideoSkeleton({ width, height }: SkeletonProps) {
 function TooltipSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center" }}>
-      <div style={{ flex: 1, width: "100%", "border-radius": 6, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center" }}>
+      <div style={{ flex: 1, width: "100%", "border-radius": "6px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center" }}>
         <Bar w="60%" h={2} />
       </div>
-      <div style={{ width: 8, height: 8, background: "var(--agd-fill)", border: "1px dashed var(--agd-stroke)", "border-top": "none", "border-left": "none", transform: "rotate(45deg)", "margin-top": -5 }} />
+      <div style={{ width: "8px", height: "8px", background: "var(--agd-fill)", border: "1px dashed var(--agd-stroke)", "border-top": "none", "border-left": "none", transform: "rotate(45deg)", "margin-top": "-5px" }} />
     </div>
   );
 }
@@ -494,12 +497,12 @@ function TooltipSkeleton({ width, height }: SkeletonProps) {
 function BreadcrumbSkeleton({ width, height }: SkeletonProps) {
   const items = Math.max(2, Math.min(4, Math.floor(width / 80)));
   return (
-    <div style={{ display: "flex", "align-items": "center", height: "100%", gap: 4 }}>
+    <div style={{ display: "flex", "align-items": "center", height: "100%", gap: "4px" }}>
       <For each={Array.from({ length: items }, (_, i) => i)}>
         {(i) => (
-          <div style={{ display: "flex", "align-items": "center", gap: 4 }}>
+          <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
             <Show when={i > 0}>
-              <span style={{ color: "var(--agd-stroke)", "font-size": 10 }}>/</span>
+              <span style={{ color: "var(--agd-stroke)", "font-size": "10px" }}>/</span>
             </Show>
             <Bar w={40 + ((i * 13) % 20)} h={2} strong={i === items - 1} />
           </div>
@@ -513,7 +516,7 @@ function PaginationSkeleton({ width, height }: SkeletonProps) {
   const count = Math.max(3, Math.min(5, Math.floor(width / 40)));
   const sz = Math.min(28, height * 0.8);
   return (
-    <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: "100%", gap: 4 }}>
+    <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: "100%", gap: "4px" }}>
       <For each={Array.from({ length: count }, (_, i) => i)}>
         {(i) => (
           <Block w={sz} h={sz} radius={4} style={i === 1 ? { background: "var(--agd-bar)" } : undefined} />
@@ -526,7 +529,7 @@ function PaginationSkeleton({ width, height }: SkeletonProps) {
 function DividerSkeleton({ width }: SkeletonProps) {
   return (
     <div style={{ display: "flex", "align-items": "center", height: "100%" }}>
-      <div style={{ width: "100%", height: 1, background: "var(--agd-stroke)" }} />
+      <div style={{ width: "100%", height: "1px", background: "var(--agd-stroke)" }} />
     </div>
   );
 }
@@ -539,7 +542,7 @@ function AccordionSkeleton({ width, height }: SkeletonProps) {
         {(i) => (
           <div style={{ "border-bottom": "1px solid var(--agd-stroke)", padding: "8px 6px", display: "flex", "align-items": "center", "justify-content": "space-between", flex: i === 0 ? 2 : 1 }}>
             <Bar w={`${40 + ((i * 17) % 25)}%`} h={3} strong />
-            <span style={{ "font-size": 8, color: "var(--agd-stroke)" }}>{i === 0 ? "\u25BC" : "\u25B6"}</span>
+            <span style={{ "font-size": "8px", color: "var(--agd-stroke)" }}>{i === 0 ? "\u25BC" : "\u25B6"}</span>
           </div>
         )}
       </For>
@@ -549,13 +552,13 @@ function AccordionSkeleton({ width, height }: SkeletonProps) {
 
 function CarouselSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", gap: 6 }}>
-      <div style={{ flex: 1, display: "flex", gap: 6, "align-items": "center" }}>
-        <span style={{ "font-size": 12, color: "var(--agd-stroke)" }}>{"\u2039"}</span>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", gap: "6px" }}>
+      <div style={{ flex: 1, display: "flex", gap: "6px", "align-items": "center" }}>
+        <span style={{ "font-size": "12px", color: "var(--agd-stroke)" }}>{"\u2039"}</span>
         <Block w="100%" h="100%" radius={4} />
-        <span style={{ "font-size": 12, color: "var(--agd-stroke)" }}>{"\u203A"}</span>
+        <span style={{ "font-size": "12px", color: "var(--agd-stroke)" }}>{"\u203A"}</span>
       </div>
-      <div style={{ display: "flex", "justify-content": "center", gap: 4 }}>
+      <div style={{ display: "flex", "justify-content": "center", gap: "4px" }}>
         <Circle size={5} />
         <Circle size={5} />
         <Circle size={5} />
@@ -566,13 +569,13 @@ function CarouselSkeleton({ width, height }: SkeletonProps) {
 
 function PricingSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", padding: 10, gap: height * 0.04 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", padding: "10px", gap: `${height * 0.04}px` }}>
       <Bar w={width * 0.4} h={3} strong />
       <Bar w={width * 0.3} h={6} strong />
-      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 4, width: "100%", padding: "8px 0" }}>
+      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "4px", width: "100%", padding: "8px 0" }}>
         <For each={Array.from({ length: 4 }, (_, i) => i)}>
           {(i) => (
-            <div style={{ display: "flex", "align-items": "center", gap: 4 }}>
+            <div style={{ display: "flex", "align-items": "center", gap: "4px" }}>
               <Circle size={5} />
               <Bar w={`${50 + ((i * 17) % 35)}%`} h={2} />
             </div>
@@ -586,16 +589,16 @@ function PricingSkeleton({ width, height }: SkeletonProps) {
 
 function TestimonialSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", padding: 10, gap: 8 }}>
-      <span style={{ "font-size": 18, "line-height": 1, color: "var(--agd-stroke)", "font-family": "serif" }}>&ldquo;</span>
-      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 4 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", padding: "10px", gap: "8px" }}>
+      <span style={{ "font-size": "18px", "line-height": 1, color: "var(--agd-stroke)", "font-family": "serif" }}>&ldquo;</span>
+      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "4px" }}>
         <Bar w="90%" h={2} />
         <Bar w="75%" h={2} />
         <Bar w="60%" h={2} />
       </div>
-      <div style={{ display: "flex", "align-items": "center", gap: 6 }}>
+      <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
         <Circle size={20} />
-        <div style={{ display: "flex", "flex-direction": "column", gap: 2 }}>
+        <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
           <Bar w={60} h={3} strong />
           <Bar w={40} h={2} />
         </div>
@@ -606,21 +609,21 @@ function TestimonialSkeleton({ width, height }: SkeletonProps) {
 
 function CtaSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: height * 0.08 }}>
+    <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", height: "100%", gap: `${height * 0.08}px` }}>
       <Bar w={width * 0.5} h={Math.max(4, height * 0.05)} strong />
       <Bar w={width * 0.35} />
-      <Block w={Math.min(140, width * 0.25)} h={Math.min(32, height * 0.15)} radius={6} style={{ "margin-top": height * 0.04, background: "var(--agd-bar)" }} />
+      <Block w={Math.min(140, width * 0.25)} h={Math.min(32, height * 0.15)} radius={6} style={{ "margin-top": `${height * 0.04}px`, background: "var(--agd-bar)" }} />
     </div>
   );
 }
 
 function AlertSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", "border-radius": 6, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 10px", gap: 8 }}>
-      <div style={{ width: 16, height: 16, "border-radius": "50%", border: "1.5px solid var(--agd-bar-strong)", display: "flex", "align-items": "center", "justify-content": "center", "flex-shrink": 0 }}>
-        <div style={{ width: 2, height: 6, background: "var(--agd-bar-strong)", "border-radius": 1 }} />
+    <div style={{ height: "100%", "border-radius": "6px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 10px", gap: "8px" }}>
+      <div style={{ width: "16px", height: "16px", "border-radius": "50%", border: "1.5px solid var(--agd-bar-strong)", display: "flex", "align-items": "center", "justify-content": "center", "flex-shrink": 0 }}>
+        <div style={{ width: "2px", height: "6px", background: "var(--agd-bar-strong)", "border-radius": "1px" }} />
       </div>
-      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 3 }}>
+      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "3px" }}>
         <Bar w="40%" h={3} strong />
         <Bar w="70%" h={2} />
       </div>
@@ -630,7 +633,7 @@ function AlertSkeleton({ width, height }: SkeletonProps) {
 
 function BannerSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center", gap: 8, padding: "0 12px" }}>
+    <div style={{ height: "100%", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center", gap: "8px", padding: "0 12px" }}>
       <Bar w={width * 0.4} h={3} strong />
       <Block w={60} h={Math.min(24, height * 0.6)} radius={4} />
     </div>
@@ -639,7 +642,7 @@ function BannerSkeleton({ width, height }: SkeletonProps) {
 
 function StatSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: height * 0.06 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: `${height * 0.06}px` }}>
       <Bar w={width * 0.5} h={2} />
       <Bar w={width * 0.4} h={Math.max(8, height * 0.18)} strong />
       <Bar w={width * 0.3} h={2} />
@@ -655,9 +658,9 @@ function StepperSkeleton({ width, height }: SkeletonProps) {
       <For each={Array.from({ length: steps }, (_, i) => i)}>
         {(i) => (
           <div style={{ display: "flex", "align-items": "center", gap: 0, flex: 1 }}>
-            <div style={{ width: dotR, height: dotR, "border-radius": "50%", border: "1.5px solid var(--agd-stroke)", background: i === 0 ? "var(--agd-bar)" : "transparent", "flex-shrink": 0 }} />
+            <div style={{ width: `${dotR}px`, height: `${dotR}px`, "border-radius": "50%", border: "1.5px solid var(--agd-stroke)", background: i === 0 ? "var(--agd-bar)" : "transparent", "flex-shrink": 0 }} />
             <Show when={i < steps - 1}>
-              <div style={{ flex: 1, height: 1, background: "var(--agd-stroke)", margin: "0 4px" }} />
+              <div style={{ flex: 1, height: "1px", background: "var(--agd-stroke)", margin: "0 4px" }} />
             </Show>
           </div>
         )}
@@ -668,9 +671,9 @@ function StepperSkeleton({ width, height }: SkeletonProps) {
 
 function TagSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", "border-radius": 4, border: "1px solid var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center", gap: 4, padding: "0 6px" }}>
+    <div style={{ height: "100%", "border-radius": "4px", border: "1px solid var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", "justify-content": "center", gap: "4px", padding: "0 6px" }}>
       <Bar w={Math.max(16, width * 0.5)} h={2} strong />
-      <div style={{ width: 8, height: 8, "border-radius": "50%", border: "1px solid var(--agd-stroke)", "flex-shrink": 0 }} />
+      <div style={{ width: "8px", height: "8px", "border-radius": "50%", border: "1px solid var(--agd-stroke)", "flex-shrink": 0 }} />
     </div>
   );
 }
@@ -679,7 +682,7 @@ function RatingSkeleton({ width, height }: SkeletonProps) {
   const stars = 5;
   const sz = Math.min(height * 0.7, width / (stars * 1.5));
   return (
-    <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: "100%", gap: sz * 0.2 }}>
+    <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: "100%", gap: `${sz * 0.2}px` }}>
       <For each={Array.from({ length: stars }, (_, i) => i)}>
         {(i) => (
           <svg width={sz} height={sz} viewBox="0 0 16 16" fill="none">
@@ -693,7 +696,7 @@ function RatingSkeleton({ width, height }: SkeletonProps) {
 
 function MapSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", position: "relative", "border-radius": 4, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", overflow: "hidden" }}>
+    <div style={{ height: "100%", position: "relative", "border-radius": "4px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", overflow: "hidden" }}>
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} fill="none" style={{ position: "absolute", inset: 0 }}>
         <line x1={0} y1={height * 0.3} x2={width} y2={height * 0.7} stroke="var(--agd-stroke)" stroke-width="0.5" opacity=".2" />
         <line x1={0} y1={height * 0.6} x2={width} y2={height * 0.2} stroke="var(--agd-stroke)" stroke-width="0.5" opacity=".15" />
@@ -713,22 +716,22 @@ function TimelineSkeleton({ width, height }: SkeletonProps) {
   const items = Math.max(3, Math.min(5, Math.floor(height / 60)));
   return (
     <div style={{ display: "flex", height: "100%", padding: "8px 0" }}>
-      <div style={{ width: 16, display: "flex", "flex-direction": "column", "align-items": "center" }}>
+      <div style={{ width: "16px", display: "flex", "flex-direction": "column", "align-items": "center" }}>
         <For each={Array.from({ length: items }, (_, i) => i)}>
           {(i) => (
             <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", flex: 1 }}>
               <Circle size={8} />
               <Show when={i < items - 1}>
-                <div style={{ flex: 1, width: 1, background: "var(--agd-stroke)" }} />
+                <div style={{ flex: 1, width: "1px", background: "var(--agd-stroke)" }} />
               </Show>
             </div>
           )}
         </For>
       </div>
-      <div style={{ flex: 1, display: "flex", "flex-direction": "column", "justify-content": "space-around", "padding-left": 8 }}>
+      <div style={{ flex: 1, display: "flex", "flex-direction": "column", "justify-content": "space-around", "padding-left": "8px" }}>
         <For each={Array.from({ length: items }, (_, i) => i)}>
           {(i) => (
-            <div style={{ display: "flex", "flex-direction": "column", gap: 3 }}>
+            <div style={{ display: "flex", "flex-direction": "column", gap: "3px" }}>
               <Bar w={`${35 + ((i * 13) % 25)}%`} h={3} strong />
               <Bar w={`${50 + ((i * 17) % 30)}%`} h={2} />
             </div>
@@ -741,7 +744,7 @@ function TimelineSkeleton({ width, height }: SkeletonProps) {
 
 function FileUploadSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", "border-radius": 8, border: "2px dashed var(--agd-stroke)", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: height * 0.06 }}>
+    <div style={{ height: "100%", "border-radius": "8px", border: "2px dashed var(--agd-stroke)", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: `${height * 0.06}px` }}>
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
         <path d="M12 16V4m0 0l-4 4m4-4l4 4" stroke="var(--agd-stroke)" stroke-width="1.5" />
         <path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" stroke="var(--agd-stroke)" stroke-width="1.5" />
@@ -755,15 +758,15 @@ function FileUploadSkeleton({ width, height }: SkeletonProps) {
 function CodeBlockSkeleton({ width, height }: SkeletonProps) {
   const lines = Math.max(3, Math.min(8, Math.floor(height / 20)));
   return (
-    <div style={{ height: "100%", "border-radius": 6, background: "var(--agd-fill)", border: "1px solid var(--agd-stroke)", padding: 8, display: "flex", "flex-direction": "column", gap: 4 }}>
-      <div style={{ display: "flex", gap: 3, "margin-bottom": 4 }}>
+    <div style={{ height: "100%", "border-radius": "6px", background: "var(--agd-fill)", border: "1px solid var(--agd-stroke)", padding: "8px", display: "flex", "flex-direction": "column", gap: "4px" }}>
+      <div style={{ display: "flex", gap: "3px", "margin-bottom": "4px" }}>
         <Circle size={6} />
         <Circle size={6} />
         <Circle size={6} />
       </div>
       <For each={Array.from({ length: lines }, (_, i) => i)}>
         {(i) => (
-          <div style={{ display: "flex", gap: 6, "padding-left": ((i > 0 && i < lines - 1) ? 12 : 0) }}>
+          <div style={{ display: "flex", gap: "6px", "padding-left": `${(i > 0 && i < lines - 1) ? 12 : 0}px` }}>
             <Bar w={`${25 + ((i * 23) % 50)}%`} h={2} strong={i === 0} />
           </div>
         )}
@@ -779,23 +782,23 @@ function CalendarSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column" }}>
       <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "6px 8px" }}>
-        <span style={{ "font-size": 8, color: "var(--agd-stroke)" }}>{"\u2039"}</span>
+        <span style={{ "font-size": "8px", color: "var(--agd-stroke)" }}>{"\u2039"}</span>
         <Bar w={width * 0.3} h={3} strong />
-        <span style={{ "font-size": 8, color: "var(--agd-stroke)" }}>{"\u203A"}</span>
+        <span style={{ "font-size": "8px", color: "var(--agd-stroke)" }}>{"\u203A"}</span>
       </div>
-      <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, gap: 2, padding: "0 4px", flex: 1 }}>
+      <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, gap: "2px", padding: "0 4px", flex: 1 }}>
         <For each={Array.from({ length: cols }, (_, i) => i)}>
           {(i) => (
-            <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: cellSz * 0.6 }}>
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: `${cellSz * 0.6}px` }}>
               <Bar w={cellSz * 0.5} h={2} />
             </div>
           )}
         </For>
         <For each={Array.from({ length: cols * rows }, (_, i) => i)}>
           {(i) => (
-            <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: cellSz }}>
-              <div style={{ width: cellSz * 0.6, height: cellSz * 0.6, "border-radius": "50%", background: i === 12 ? "var(--agd-bar)" : "transparent", display: "flex", "align-items": "center", "justify-content": "center" }}>
-                <div style={{ width: 2, height: 2, "border-radius": 1, background: "var(--agd-bar-strong)", opacity: i === 12 ? 1 : 0.3 }} />
+            <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: `${cellSz}px` }}>
+              <div style={{ width: `${cellSz * 0.6}px`, height: `${cellSz * 0.6}px`, "border-radius": "50%", background: i === 12 ? "var(--agd-bar)" : "transparent", display: "flex", "align-items": "center", "justify-content": "center" }}>
+                <div style={{ width: "2px", height: "2px", "border-radius": "1px", background: "var(--agd-bar-strong)", opacity: i === 12 ? 1 : 0.3 }} />
               </div>
             </div>
           )}
@@ -807,9 +810,9 @@ function CalendarSkeleton({ width, height }: SkeletonProps) {
 
 function NotificationSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", "border-radius": 8, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 10px", gap: 8 }}>
+    <div style={{ height: "100%", "border-radius": "8px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 10px", gap: "8px" }}>
       <Circle size={Math.min(32, height * 0.55)} />
-      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 3 }}>
+      <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "3px" }}>
         <Bar w="50%" h={3} strong />
         <Bar w="75%" h={2} />
       </div>
@@ -822,7 +825,7 @@ function ProductCardSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column" }}>
       <div style={{ height: "50%", background: "var(--agd-fill)", "border-bottom": "1px dashed var(--agd-stroke)" }} />
-      <div style={{ flex: 1, padding: 10, display: "flex", "flex-direction": "column", gap: 5 }}>
+      <div style={{ flex: 1, padding: "10px", display: "flex", "flex-direction": "column", gap: "5px" }}>
         <Bar w="65%" h={4} strong />
         <Bar w="40%" h={3} />
         <div style={{ flex: 1 }} />
@@ -838,20 +841,20 @@ function ProductCardSkeleton({ width, height }: SkeletonProps) {
 function ProfileSkeleton({ width, height }: SkeletonProps) {
   const avatarSz = Math.min(48, height * 0.3);
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: height * 0.06 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", "justify-content": "center", gap: `${height * 0.06}px` }}>
       <Circle size={avatarSz} />
       <Bar w={width * 0.45} h={4} strong />
       <Bar w={width * 0.3} h={2} />
-      <div style={{ display: "flex", gap: width * 0.08, "margin-top": height * 0.04 }}>
-        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: 2 }}>
+      <div style={{ display: "flex", gap: `${width * 0.08}px`, "margin-top": `${height * 0.04}px` }}>
+        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: "2px" }}>
           <Bar w={20} h={3} strong />
           <Bar w={28} h={2} />
         </div>
-        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: 2 }}>
+        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: "2px" }}>
           <Bar w={20} h={3} strong />
           <Bar w={28} h={2} />
         </div>
-        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: 2 }}>
+        <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: "2px" }}>
           <Bar w={20} h={3} strong />
           <Bar w={28} h={2} />
         </div>
@@ -865,11 +868,11 @@ function DrawerSkeleton({ width, height }: SkeletonProps) {
   const items = Math.max(3, Math.floor(height / 40));
   return (
     <div style={{ height: "100%", display: "flex" }}>
-      <div style={{ width: width - panelW, background: "var(--agd-fill)", opacity: 0.3 }} />
-      <div style={{ flex: 1, "border-left": "1px solid var(--agd-stroke)", display: "flex", "flex-direction": "column", padding: width * 0.04 }}>
-        <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": height * 0.06 }}>
+      <div style={{ width: `${width - panelW}px`, background: "var(--agd-fill)", opacity: 0.3 }} />
+      <div style={{ flex: 1, "border-left": "1px solid var(--agd-stroke)", display: "flex", "flex-direction": "column", padding: `${width * 0.04}px` }}>
+        <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": `${height * 0.06}px` }}>
           <Bar w={panelW * 0.4} h={4} strong />
-          <div style={{ width: 12, height: 12, border: "1px solid var(--agd-stroke)", "border-radius": 3 }} />
+          <div style={{ width: "12px", height: "12px", border: "1px solid var(--agd-stroke)", "border-radius": "3px" }} />
         </div>
         <For each={Array.from({ length: items }, (_, i) => i)}>
           {(i) => (
@@ -886,12 +889,12 @@ function DrawerSkeleton({ width, height }: SkeletonProps) {
 function PopoverSkeleton({ width, height }: SkeletonProps) {
   return (
     <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center" }}>
-      <div style={{ flex: 1, width: "100%", "border-radius": 8, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", padding: 10, display: "flex", "flex-direction": "column", gap: 5 }}>
+      <div style={{ flex: 1, width: "100%", "border-radius": "8px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", padding: "10px", display: "flex", "flex-direction": "column", gap: "5px" }}>
         <Bar w="70%" h={3} strong />
         <Bar w="90%" h={2} />
         <Bar w="60%" h={2} />
       </div>
-      <div style={{ width: 10, height: 10, background: "var(--agd-fill)", border: "1px dashed var(--agd-stroke)", "border-top": "none", "border-left": "none", transform: "rotate(45deg)", "margin-top": -6 }} />
+      <div style={{ width: "10px", height: "10px", background: "var(--agd-fill)", border: "1px dashed var(--agd-stroke)", "border-top": "none", "border-left": "none", transform: "rotate(45deg)", "margin-top": "-6px" }} />
     </div>
   );
 }
@@ -899,7 +902,7 @@ function PopoverSkeleton({ width, height }: SkeletonProps) {
 function LogoSkeleton({ width, height }: SkeletonProps) {
   const iconSz = Math.min(height * 0.7, width * 0.3);
   return (
-    <div style={{ height: "100%", display: "flex", "align-items": "center", gap: width * 0.08 }}>
+    <div style={{ height: "100%", display: "flex", "align-items": "center", gap: `${width * 0.08}px` }}>
       <Block w={iconSz} h={iconSz} radius={iconSz * 0.25} />
       <Bar w={width * 0.45} h={Math.max(4, height * 0.2)} strong />
     </div>
@@ -913,11 +916,11 @@ function FaqSkeleton({ width, height }: SkeletonProps) {
       <For each={Array.from({ length: items }, (_, i) => i)}>
         {(i) => (
           <div style={{ "border-bottom": "1px solid var(--agd-stroke)", padding: "8px 6px", display: "flex", "align-items": "center", "justify-content": "space-between", flex: i === 0 ? 2 : 1 }}>
-            <div style={{ display: "flex", "align-items": "center", gap: 6 }}>
-              <span style={{ "font-size": 9, "font-weight": 700, color: "var(--agd-stroke)" }}>Q</span>
+            <div style={{ display: "flex", "align-items": "center", gap: "6px" }}>
+              <span style={{ "font-size": "9px", "font-weight": 700, color: "var(--agd-stroke)" }}>Q</span>
               <Bar w={width * (0.3 + ((i * 13) % 25) / 100)} h={3} strong />
             </div>
-            <span style={{ "font-size": 8, color: "var(--agd-stroke)" }}>{i === 0 ? "\u25BC" : "\u25B6"}</span>
+            <span style={{ "font-size": "8px", color: "var(--agd-stroke)" }}>{i === 0 ? "\u25BC" : "\u25B6"}</span>
           </div>
         )}
       </For>
@@ -929,10 +932,10 @@ function GallerySkeleton({ width, height }: SkeletonProps) {
   const cols = Math.max(2, Math.min(4, Math.floor(width / 120)));
   const rows = Math.max(1, Math.min(3, Math.floor(height / 120)));
   return (
-    <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, "grid-template-rows": `repeat(${rows}, 1fr)`, gap: 4, height: "100%" }}>
+    <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, "grid-template-rows": `repeat(${rows}, 1fr)`, gap: "4px", height: "100%" }}>
       <For each={Array.from({ length: cols * rows }, (_, i) => i)}>
         {(i) => (
-          <div style={{ "border-radius": 4, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", position: "relative", overflow: "hidden" }}>
+          <div style={{ "border-radius": "4px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", position: "relative", overflow: "hidden" }}>
             <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" fill="none">
               <line x1="0" y1="0" x2="100" y2="100" stroke="var(--agd-stroke)" stroke-width="0.5" />
               <line x1="100" y1="0" x2="0" y2="100" stroke="var(--agd-stroke)" stroke-width="0.5" />
@@ -970,10 +973,10 @@ function SliderSkeleton({ width, height }: SkeletonProps) {
   const fillW = width * 0.55;
   return (
     <div style={{ height: "100%", display: "flex", "align-items": "center", position: "relative" }}>
-      <div style={{ width: "100%", height: trackH, "border-radius": trackH / 2, background: "var(--agd-fill)", border: "1px solid var(--agd-stroke)", position: "relative" }}>
-        <div style={{ width: fillW, height: "100%", "border-radius": trackH / 2, background: "var(--agd-bar)" }} />
+      <div style={{ width: "100%", height: `${trackH}px`, "border-radius": `${trackH / 2}px`, background: "var(--agd-fill)", border: "1px solid var(--agd-stroke)", position: "relative" }}>
+        <div style={{ width: `${fillW}px`, height: "100%", "border-radius": `${trackH / 2}px`, background: "var(--agd-bar)" }} />
       </div>
-      <div style={{ position: "absolute", left: fillW - thumbR, width: thumbR * 2, height: thumbR * 2, "border-radius": "50%", border: "1.5px solid var(--agd-stroke)", background: "var(--agd-fill)" }} />
+      <div style={{ position: "absolute", left: `${fillW - thumbR}px`, width: `${thumbR * 2}px`, height: `${thumbR * 2}px`, "border-radius": "50%", border: "1.5px solid var(--agd-stroke)", background: "var(--agd-fill)" }} />
     </div>
   );
 }
@@ -984,24 +987,24 @@ function DatePickerSkeleton({ width, height }: SkeletonProps) {
   const rows = 4;
   const cellSz = Math.min((width - 16) / cols, (height - inputH - 40) / (rows + 1));
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", gap: 4 }}>
-      <div style={{ height: inputH, "border-radius": 4, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 8px", "justify-content": "space-between" }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", gap: "4px" }}>
+      <div style={{ height: `${inputH}px`, "border-radius": "4px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: "0 8px", "justify-content": "space-between" }}>
         <Bar w="40%" h={2} />
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1" stroke="var(--agd-stroke)" stroke-width="1" /><line x1="2" y1="6" x2="14" y2="6" stroke="var(--agd-stroke)" stroke-width="0.5" /></svg>
       </div>
-      <div style={{ flex: 1, "border-radius": 6, border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "flex-direction": "column" }}>
+      <div style={{ flex: 1, "border-radius": "6px", border: "1px dashed var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "flex-direction": "column" }}>
         <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", padding: "4px 6px" }}>
-          <span style={{ "font-size": 7, color: "var(--agd-stroke)" }}>{"\u2039"}</span>
+          <span style={{ "font-size": "7px", color: "var(--agd-stroke)" }}>{"\u2039"}</span>
           <Bar w={width * 0.25} h={2} strong />
-          <span style={{ "font-size": 7, color: "var(--agd-stroke)" }}>{"\u203A"}</span>
+          <span style={{ "font-size": "7px", color: "var(--agd-stroke)" }}>{"\u203A"}</span>
         </div>
-        <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, gap: 1, padding: "0 4px", flex: 1 }}>
+        <div style={{ display: "grid", "grid-template-columns": `repeat(${cols}, 1fr)`, gap: "1px", padding: "0 4px", flex: 1 }}>
           <For each={Array.from({ length: cols * rows }, (_, i) => i)}>
             {(i) => (
-              <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: cellSz }}>
-                <div style={{ width: cellSz * 0.5, height: cellSz * 0.5, "border-radius": "50%", background: i === 10 ? "var(--agd-bar)" : "transparent" }}>
+              <div style={{ display: "flex", "align-items": "center", "justify-content": "center", height: `${cellSz}px` }}>
+                <div style={{ width: `${cellSz * 0.5}px`, height: `${cellSz * 0.5}px`, "border-radius": "50%", background: i === 10 ? "var(--agd-bar)" : "transparent" }}>
                   <div style={{ width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center" }}>
-                    <div style={{ width: 1.5, height: 1.5, "border-radius": 1, background: "var(--agd-bar-strong)", opacity: i === 10 ? 1 : 0.25 }} />
+                    <div style={{ width: "1.5px", height: "1.5px", "border-radius": "1px", background: "var(--agd-bar-strong)", opacity: i === 10 ? 1 : 0.25 }} />
                   </div>
                 </div>
               </div>
@@ -1015,21 +1018,21 @@ function DatePickerSkeleton({ width, height }: SkeletonProps) {
 
 function SkeletonSkeletonRenderer({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", gap: height * 0.08, padding: 4 }}>
-      <div style={{ width: "100%", height: height * 0.2, "border-radius": 4, background: "var(--agd-fill)" }} />
-      <div style={{ width: "70%", height: Math.max(6, height * 0.1), "border-radius": 3, background: "var(--agd-fill)" }} />
-      <div style={{ width: "90%", height: Math.max(4, height * 0.06), "border-radius": 3, background: "var(--agd-fill)" }} />
-      <div style={{ width: "50%", height: Math.max(4, height * 0.06), "border-radius": 3, background: "var(--agd-fill)" }} />
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", gap: `${height * 0.08}px`, padding: "4px" }}>
+      <div style={{ width: "100%", height: `${height * 0.2}px`, "border-radius": "4px", background: "var(--agd-fill)" }} />
+      <div style={{ width: "70%", height: `${Math.max(6, height * 0.1)}px`, "border-radius": "3px", background: "var(--agd-fill)" }} />
+      <div style={{ width: "90%", height: `${Math.max(4, height * 0.06)}px`, "border-radius": "3px", background: "var(--agd-fill)" }} />
+      <div style={{ width: "50%", height: `${Math.max(4, height * 0.06)}px`, "border-radius": "3px", background: "var(--agd-fill)" }} />
     </div>
   );
 }
 
 function ChipSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "align-items": "center", gap: 6 }}>
-      <div style={{ height: "100%", flex: 1, "border-radius": height / 2, border: "1px solid var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: `0 ${height * 0.3}px`, gap: 4 }}>
+    <div style={{ height: "100%", display: "flex", "align-items": "center", gap: "6px" }}>
+      <div style={{ height: "100%", flex: 1, "border-radius": `${height / 2}px`, border: "1px solid var(--agd-stroke)", background: "var(--agd-fill)", display: "flex", "align-items": "center", padding: `0 ${height * 0.3}px`, gap: "4px" }}>
         <Bar w="60%" h={2} strong />
-        <div style={{ width: Math.max(6, height * 0.3), height: Math.max(6, height * 0.3), "border-radius": "50%", border: "1px solid var(--agd-stroke)", "flex-shrink": 0, "margin-left": "auto" }} />
+        <div style={{ width: `${Math.max(6, height * 0.3)}px`, height: `${Math.max(6, height * 0.3)}px`, "border-radius": "50%", border: "1px solid var(--agd-stroke)", "flex-shrink": 0, "margin-left": "auto" }} />
       </div>
     </div>
   );
@@ -1063,12 +1066,12 @@ function FeatureSkeleton({ width, height }: SkeletonProps) {
   const iconSz = Math.min(36, height * 0.25, width * 0.12);
   const items = Math.max(1, Math.min(3, Math.floor(height / 80)));
   return (
-    <div style={{ display: "flex", "flex-direction": "column", height: "100%", "justify-content": "space-around", padding: 8 }}>
+    <div style={{ display: "flex", "flex-direction": "column", height: "100%", "justify-content": "space-around", padding: "8px" }}>
       <For each={Array.from({ length: items }, (_, i) => i)}>
         {(i) => (
-          <div style={{ display: "flex", gap: width * 0.04, "align-items": "flex-start" }}>
+          <div style={{ display: "flex", gap: `${width * 0.04}px`, "align-items": "flex-start" }}>
             <Block w={iconSz} h={iconSz} radius={iconSz * 0.25} />
-            <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 4 }}>
+            <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "4px" }}>
               <Bar w={`${40 + ((i * 13) % 20)}%`} h={3} strong />
               <Bar w={`${60 + ((i * 17) % 25)}%`} h={2} />
             </div>
@@ -1083,12 +1086,12 @@ function TeamSkeleton({ width, height }: SkeletonProps) {
   const cols = Math.max(2, Math.min(4, Math.floor(width / 120)));
   const avatarSz = Math.min(36, height * 0.25);
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", gap: height * 0.06, padding: height * 0.06 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", gap: `${height * 0.06}px`, padding: `${height * 0.06}px` }}>
       <Bar w={width * 0.3} h={4} strong />
-      <div style={{ display: "flex", gap: width * 0.06, "justify-content": "center", flex: 1, "align-items": "center" }}>
+      <div style={{ display: "flex", gap: `${width * 0.06}px`, "justify-content": "center", flex: 1, "align-items": "center" }}>
         <For each={Array.from({ length: cols }, (_, i) => i)}>
           {(i) => (
-            <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: 6 }}>
+            <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: "6px" }}>
               <Circle size={avatarSz} />
               <Bar w={width * 0.12} h={3} strong />
               <Bar w={width * 0.08} h={2} />
@@ -1103,20 +1106,20 @@ function TeamSkeleton({ width, height }: SkeletonProps) {
 function LoginSkeleton({ width, height }: SkeletonProps) {
   const fields = Math.max(2, Math.min(3, Math.floor(height / 80)));
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", padding: width * 0.06, gap: height * 0.04 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", "align-items": "center", padding: `${width * 0.06}px`, gap: `${height * 0.04}px` }}>
       <Bar w={width * 0.5} h={Math.max(5, height * 0.04)} strong />
       <Bar w={width * 0.35} h={2} />
-      <div style={{ width: "100%", display: "flex", "flex-direction": "column", gap: height * 0.03, "margin-top": height * 0.04 }}>
+      <div style={{ width: "100%", display: "flex", "flex-direction": "column", gap: `${height * 0.03}px`, "margin-top": `${height * 0.04}px` }}>
         <For each={Array.from({ length: fields }, (_, i) => i)}>
           {(i) => (
-            <div style={{ display: "flex", "flex-direction": "column", gap: 3 }}>
+            <div style={{ display: "flex", "flex-direction": "column", gap: "3px" }}>
               <Bar w={Math.min(60, width * 0.2)} h={2} />
               <Block w="100%" h={Math.min(32, height * 0.1)} radius={4} />
             </div>
           )}
         </For>
       </div>
-      <Block w="100%" h={Math.min(36, height * 0.12)} radius={6} style={{ "margin-top": height * 0.03, background: "var(--agd-bar)" }} />
+      <Block w="100%" h={Math.min(36, height * 0.12)} radius={6} style={{ "margin-top": `${height * 0.03}px`, background: "var(--agd-bar)" }} />
       <Bar w={width * 0.4} h={2} />
     </div>
   );
@@ -1124,24 +1127,24 @@ function LoginSkeleton({ width, height }: SkeletonProps) {
 
 function ContactSkeleton({ width, height }: SkeletonProps) {
   return (
-    <div style={{ height: "100%", display: "flex", "flex-direction": "column", padding: width * 0.04, gap: height * 0.03 }}>
+    <div style={{ height: "100%", display: "flex", "flex-direction": "column", padding: `${width * 0.04}px`, gap: `${height * 0.03}px` }}>
       <Bar w={width * 0.4} h={4} strong />
       <Bar w={width * 0.6} h={2} />
-      <div style={{ display: "flex", gap: 6, "margin-top": height * 0.03 }}>
-        <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 3 }}>
+      <div style={{ display: "flex", gap: "6px", "margin-top": `${height * 0.03}px` }}>
+        <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "3px" }}>
           <Bar w={50} h={2} />
           <Block w="100%" h={Math.min(28, height * 0.1)} radius={4} />
         </div>
-        <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: 3 }}>
+        <div style={{ flex: 1, display: "flex", "flex-direction": "column", gap: "3px" }}>
           <Bar w={40} h={2} />
           <Block w="100%" h={Math.min(28, height * 0.1)} radius={4} />
         </div>
       </div>
-      <div style={{ display: "flex", "flex-direction": "column", gap: 3 }}>
+      <div style={{ display: "flex", "flex-direction": "column", gap: "3px" }}>
         <Bar w={50} h={2} />
         <Block w="100%" h={Math.min(28, height * 0.1)} radius={4} />
       </div>
-      <div style={{ display: "flex", "flex-direction": "column", gap: 3, flex: 1 }}>
+      <div style={{ display: "flex", "flex-direction": "column", gap: "3px", flex: 1 }}>
         <Bar w={60} h={2} />
         <Block w="100%" h="100%" radius={4} />
       </div>
@@ -1226,12 +1229,12 @@ export function Skeleton({ type, width, height, text }: { type: ComponentType; w
   if (!Renderer) {
     return (
       <div style={{ width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center" }}>
-        <span style={{ "font-size": 10, "font-weight": 600, color: "var(--agd-text-3)", "text-transform": "uppercase", "letter-spacing": "0.06em", opacity: 0.5 }}>{type}</span>
+        <span style={{ "font-size": "10px", "font-weight": 600, color: "var(--agd-text-3)", "text-transform": "uppercase", "letter-spacing": "0.06em", opacity: 0.5 }}>{type}</span>
       </div>
     );
   }
   return (
-    <div style={{ width: "100%", height: "100%", padding: 8, position: "relative", "pointer-events": "none" }}>
+    <div style={{ width: "100%", height: "100%", padding: "8px", position: "relative", "pointer-events": "none" }}>
       <Renderer width={width} height={height} text={text} />
     </div>
   );
