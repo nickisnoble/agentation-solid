@@ -3,12 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter agentation watch & pnpm --filter feedback-tool-example dev",
-    "build": "pnpm --filter agentation build",
-    "example": "pnpm --filter feedback-tool-example dev",
+    "dev": "pnpm --filter agentation-solid watch & pnpm --filter agentation-solid-example dev",
+    "build": "pnpm --filter agentation-solid build",
+    "example": "pnpm --filter agentation-solid-example dev",
     "pack": "cd package && pnpm pack",
     "mcp": "pnpm --filter agentation-mcp start",
-    "publish:agentation": "pnpm --filter agentation publish --access public",
+    "publish:agentation": "pnpm --filter agentation-solid publish --access public",
     "publish:mcp": "pnpm --filter agentation-mcp publish --access public",
     "publish:all": "pnpm publish:agentation && pnpm publish:mcp"
   },
