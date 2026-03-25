@@ -1,4 +1,5 @@
-import { createSignal, createEffect, onMount, onCleanup, Show, For, JSX, batch } from "solid-js";
+import { createSignal, createEffect, createMemo, onMount, onCleanup, Show, For, JSX, batch } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { COMPONENT_MAP, DEFAULT_SIZES, type ComponentType, type DesignPlacement } from "./types";
 import { Skeleton } from "./skeletons";
 import { AnnotationPopupCSS } from "../annotation-popup-css";
@@ -122,6 +123,13 @@ function generateId() {
 }
 
 export function DesignMode(props: DesignModeProps) {
+  // Local store for placements — reconcile by id keeps proxy references stable
+  // so <For> doesn't destroy/recreate DOM elements on every property change.
+  const [store, setStore] = createStore({ placements: [] as DesignPlacement[] });
+  createEffect(() => {
+    setStore("placements", reconcile(props.placements, { key: "id" }));
+  });
+
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [drawBox, setDrawBox] = createSignal<{ x: number; y: number; w: number; h: number } | null>(null);
   const [selectBox, setSelectBox] = createSignal<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -646,8 +654,8 @@ export function DesignMode(props: DesignModeProps) {
         data-feedback-toolbar
         onMouseDown={handleOverlayMouseDown}
       >
-        {/* Placed components */}
-        <For each={props.placements}>{(p) => {
+        {/* Placed components — uses store.placements for stable references */}
+        <For each={store.placements}>{(p) => {
           const isSelected = () => selectedIds().has(p.id);
           const label = () => COMPONENT_MAP[p.type]?.label || p.type;
           const screenY = () => p.y - scrollY;
@@ -667,9 +675,10 @@ export function DesignMode(props: DesignModeProps) {
               onDblClick={() => handleDoubleClick(p.id)}
             >
               <span class={styles.placementLabel}>{label()}</span>
-              <span class={`${styles.placementAnnotation} ${p.text ? styles.annotationVisible : ""}`}>{(() => { if (p.text) lastAnnotationText.set(p.id, p.text); return p.text || lastAnnotationText.get(p.id) || ""; })()}</span>
+              <span class={`${styles.placementAnnotation} ${p.text ? styles.annotationVisible : ""}`}>{() => { if (p.text) lastAnnotationText.set(p.id, p.text); return p.text || lastAnnotationText.get(p.id) || ""; }}</span>
               <div class={styles.placementContent}>
-                <Skeleton type={p.type} width={p.width} height={p.height} text={p.text} />
+                {/* Reactive child — recreates skeleton when dimensions change */}
+                {() => <Skeleton type={p.type} width={p.width} height={p.height} text={p.text} />}
               </div>
 
               {/* Delete button */}

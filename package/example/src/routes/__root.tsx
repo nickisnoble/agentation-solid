@@ -1,12 +1,12 @@
 import {
   HeadContent,
-  Link,
   Outlet,
   Scripts,
   createRootRoute,
 } from "@tanstack/solid-router";
 import { HydrationScript } from "solid-js/web";
 import { Agentation } from "agentation-solid";
+import { Nav } from "../components/Nav";
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -48,10 +48,7 @@ function RootComponent() {
         `}</style>
       </head>
       <body>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/about">About</Link>
-        </nav>
+        <Nav />
         <main>
           <Outlet />
         </main>

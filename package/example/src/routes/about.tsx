@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/solid-router";
+import { Card } from "../components/Card";
 
 export const Route = createFileRoute("/about")({
   component: AboutPage,
@@ -14,15 +15,7 @@ function AboutPage() {
         This is a second page to verify the toolbar persists across client-side navigation.
       </p>
 
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #eee",
-          "border-radius": "12px",
-          padding: "1.5rem",
-          "box-shadow": "0 1px 3px rgba(0,0,0,0.06)",
-        }}
-      >
+      <Card>
         <h2 style={{ "font-size": "1.125rem", "font-weight": "600", "margin-bottom": "0.75rem" }}>
           What is Agentation?
         </h2>
@@ -31,7 +24,7 @@ function AboutPage() {
           for AI coding agents. Click elements to annotate them, add comments, and export
           structured feedback that agents can act on.
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

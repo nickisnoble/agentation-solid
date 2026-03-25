@@ -1,4 +1,5 @@
 import { createSignal, createEffect, onMount, onCleanup, Show, For, JSX, batch } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { captureElement } from "./section-detection";
 import { AnnotationPopupCSS } from "../annotation-popup-css";
 import type { DetectedSection, RearrangeState } from "./types";
@@ -130,7 +131,13 @@ type RearrangeOverlayProps = {
 };
 
 export function RearrangeOverlay(props: RearrangeOverlayProps) {
-  const sections = () => props.rearrangeState.sections;
+  // Local store for sections — reconcile by id keeps proxy references stable
+  // so <For> doesn't destroy/recreate DOM elements on property changes.
+  const [sectionStore, setSectionStore] = createStore({ items: [] as DetectedSection[] });
+  createEffect(() => {
+    setSectionStore("items", reconcile(props.rearrangeState.sections, { key: "id" }));
+  });
+  const sections = () => sectionStore.items;
   let rearrangeStateRef = props.rearrangeState;
   createEffect(() => { rearrangeStateRef = props.rearrangeState; });
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
@@ -837,7 +844,7 @@ export function RearrangeOverlay(props: RearrangeOverlayProps) {
               <span class={styles.sectionLabel} style={{ "background-color": color.pill }}>
                 {section.label}
               </span>
-              <span class={`${styles.sectionAnnotation} ${section.note ? styles.annotationVisible : ""}`}>{(() => { if (section.note) lastNoteTextRef.set(section.id, section.note); return section.note || lastNoteTextRef.get(section.id) || ""; })()}</span>
+              <span class={`${styles.sectionAnnotation} ${section.note ? styles.annotationVisible : ""}`}>{() => { if (section.note) lastNoteTextRef.set(section.id, section.note); return section.note || lastNoteTextRef.get(section.id) || ""; }}</span>
               <span class={styles.sectionDimensions}>
                 {Math.round(rect().width)} &times; {Math.round(rect().height)}
               </span>
@@ -885,7 +892,7 @@ export function RearrangeOverlay(props: RearrangeOverlayProps) {
                 <span class={styles.sectionLabel} style={{ "background-color": SECTION_COLOR.pill }}>
                   {section.label}
                 </span>
-                <span class={`${styles.sectionAnnotation} ${section.note ? styles.annotationVisible : ""}`}>{(() => { if (section.note) lastNoteTextRef.set(section.id, section.note); return section.note || lastNoteTextRef.get(section.id) || ""; })()}</span>
+                <span class={`${styles.sectionAnnotation} ${section.note ? styles.annotationVisible : ""}`}>{() => { if (section.note) lastNoteTextRef.set(section.id, section.note); return section.note || lastNoteTextRef.get(section.id) || ""; }}</span>
                 <span class={styles.sectionDimensions}>
                   {Math.round(rect().width)} &times; {Math.round(rect().height)}
                 </span>

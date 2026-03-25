@@ -30,6 +30,7 @@ import { detectPageSections } from "../design-mode/section-detection";
 import { DEFAULT_SIZES, type DesignPlacement, type ComponentType as DesignComponentType, type RearrangeState } from "../design-mode/types";
 import {
   identifyElement,
+  getElementPath,
   getNearbyText,
   getElementClasses,
   getDetailedComputedStyles,
@@ -100,19 +101,28 @@ function identifyElementWithComponents(
   name: string;
   /** Raw element name without component path */
   elementName: string;
-  /** DOM path */
+  /** DOM path (relative to innermost component when available) */
   path: string;
   /** Component path (e.g., '<SideNav> <LinkComponent>') */
   reactComponents: string | null;
 } {
-  const { name: elementName, path } = identifyElement(element);
+  const { name: elementName, path: fullPath } = identifyElement(element);
 
   // If component detection is off, just return element info
   if (componentMode === "off") {
-    return { name: elementName, elementName, path, reactComponents: null };
+    return { name: elementName, elementName, path: fullPath, reactComponents: null };
   }
 
   const info = getSolidComponentName(element, { mode: componentMode });
+
+  // Build path relative to innermost component when available
+  let path = fullPath;
+  if (info.innermostElement && info.innermostElement instanceof HTMLElement) {
+    const relativePath = getElementPath(element, 6, info.innermostElement);
+    if (relativePath) {
+      path = relativePath;
+    }
+  }
 
   return {
     name: info.path ? `${info.path} ${elementName}` : elementName,

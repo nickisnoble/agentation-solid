@@ -58,8 +58,11 @@ export function getShadowHost(element: Element): Element | null {
 /**
  * Gets a readable path for an element (e.g., "article > section > p")
  * Supports elements inside shadow DOM by crossing shadow boundaries.
+ *
+ * @param stopAt - Optional ancestor node to stop at (for component-relative paths).
+ *   When provided, the path is built relative to this ancestor rather than the page root.
  */
-export function getElementPath(target: HTMLElement, maxDepth = 4): string {
+export function getElementPath(target: HTMLElement, maxDepth = 4, stopAt?: Node): string {
   const parts: string[] = [];
   let current: HTMLElement | null = target;
   let depth = 0;
@@ -69,6 +72,9 @@ export function getElementPath(target: HTMLElement, maxDepth = 4): string {
 
     // Skip generic wrappers
     if (tag === "html" || tag === "body") break;
+
+    // Stop at the component boundary (don't include it — it IS the component)
+    if (stopAt && current === stopAt) break;
 
     // Get identifier
     let identifier = tag;

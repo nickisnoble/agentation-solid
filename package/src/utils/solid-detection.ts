@@ -37,6 +37,14 @@ export const DEFAULT_SKIP_EXACT = new Set([
   "Dynamic",
   "Portal",
   "ErrorBoundary",
+  // Context providers (Solid often lowercases these)
+  "provider",
+  // TanStack Router internals
+  "MatchesInner",
+  "Matches",
+  "CatchBoundary",
+  "CatchBoundaryImpl",
+  "RouterProvider",
 ]);
 
 /**
@@ -47,7 +55,7 @@ export const DEFAULT_SKIP_EXACT = new Set([
 export const DEFAULT_SKIP_PATTERNS: RegExp[] = [
   /Boundary$/, // ErrorBoundary, RedirectBoundary
   /BoundaryHandler$/, // ErrorBoundaryHandler
-  /Provider$/, // ThemeProvider, Context.Provider
+  /[Pp]rovider$/, // ThemeProvider, Context.Provider, provider
   /Consumer$/, // Context.Consumer
   /^(Inner|Outer)/, // InnerLayoutRouter
   /Router$/, // AppRouter, BrowserRouter
@@ -58,7 +66,8 @@ export const DEFAULT_SKIP_PATTERNS: RegExp[] = [
   /Handler$/, // ScrollAndFocusHandler, ErrorBoundaryHandler
   /^With[A-Z]/, // withRouter, WithAuth (HOCs)
   /Wrapper$/, // Generic wrappers
-  /^Root$/, // Generic Root component
+  /^Root(Component|Layout|Route)?$/, // Generic Root, RootComponent, RootLayout
+  /^Matches/, // TanStack Router: Matches, MatchesInner
 ];
 
 /**
@@ -332,19 +341,14 @@ const trackedComponentOwners = new Set<SolidOwner>();
 
 let ownerTrackingInstalled = false;
 
-/**
- * Install a hook on Solid's DEV.hooks.afterCreateOwner to track every
- * component owner that gets created — including in separate render() roots.
- * Safe to call multiple times (idempotent).
- */
-export function initOwnerTracking(): void {
+function installOwnerHook(): void {
   if (ownerTrackingInstalled || typeof window === "undefined") return;
-  ownerTrackingInstalled = true;
 
   try {
     // DEV is only defined in development builds of solid-js
     if (!DEV?.hooks) return;
 
+    ownerTrackingInstalled = true;
     const prev = DEV.hooks.afterCreateOwner;
     DEV.hooks.afterCreateOwner = (owner: any) => {
       // name/component are set by devComponent AFTER createComputation returns,
@@ -356,9 +360,22 @@ export function initOwnerTracking(): void {
       });
       if (typeof prev === "function") prev(owner);
     };
-  } catch (err) {
-    console.warn("[agentation] initOwnerTracking error:", err);
+  } catch {
+    // DEV hooks not available (production build or SSR)
   }
+}
+
+// Install hook at module load time so we capture ALL component owners,
+// including those created before <Agentation /> renders.
+installOwnerHook();
+
+/**
+ * Install a hook on Solid's DEV.hooks.afterCreateOwner to track every
+ * component owner that gets created — including in separate render() roots.
+ * Safe to call multiple times (idempotent).
+ */
+export function initOwnerTracking(): void {
+  installOwnerHook();
 }
 
 /**
@@ -521,13 +538,19 @@ function ownerContainsElement(owner: SolidOwner, target: HTMLElement): boolean {
  * Walk the owner tree from root, collecting component owners that contain
  * the target element. Results are ordered outermost → innermost.
  */
+interface TreeWalkResult {
+  components: string[];
+  innermostElement?: Node;
+}
+
 function collectComponentsFromTree(
   root: SolidOwner,
   target: HTMLElement,
   config: ResolvedConfig,
   domClasses?: Set<string>,
-): string[] {
+): TreeWalkResult {
   const components: string[] = [];
+  let innermostElement: Node | undefined;
   const visited = new WeakSet<SolidOwner>();
   let depth = 0;
 
@@ -541,9 +564,13 @@ function collectComponentsFromTree(
     }
     visited.add(owner);
 
-    if (owner.component) {
-      const rawName = owner.name || owner.componentName;
-      if (rawName && typeof rawName === "string") {
+    const rawName = owner.name || owner.componentName;
+    if (rawName && typeof rawName === "string") {
+      // Accept owners with owner.component set (standard dev mode) OR
+      // owners with PascalCase names that have DOM output (catches hydrated
+      // components where devComponent may not set owner.component).
+      const isComponent = owner.component || /^[A-Z]/.test(rawName);
+      if (isComponent) {
         const name = rawName.replace(/^\[solid-refresh\]/, "");
         if (
           !isMinifiedName(name) &&
@@ -551,6 +578,11 @@ function collectComponentsFromTree(
           shouldIncludeComponent(name, depth, config, domClasses)
         ) {
           components.push(name);
+          // Track the innermost component's DOM element for relative paths
+          const dom = resolveOwnerDom(owner);
+          if (dom instanceof Node) {
+            innermostElement = dom;
+          }
         }
       }
     }
@@ -567,7 +599,22 @@ function collectComponentsFromTree(
   }
 
   walk(root);
-  return components;
+  return { components, innermostElement };
+}
+
+/**
+ * Resolve the DOM output from an owner, handling signal accessors.
+ */
+function resolveOwnerDom(owner: SolidOwner): unknown {
+  let dom = owner.tValue !== undefined ? owner.tValue : owner.value;
+  if (typeof dom === "function") {
+    try {
+      dom = (dom as Function)();
+    } catch {
+      return null;
+    }
+  }
+  return dom;
 }
 
 /**
@@ -672,8 +719,10 @@ function getParentOwner(owner: SolidOwner): SolidOwner | null {
 export interface SolidComponentInfo {
   /** Full component path like "<App> <Layout> <Button>" */
   path: string | null;
-  /** Array of component names from innermost to outermost */
+  /** Array of component names from outermost to innermost */
   components: string[];
+  /** DOM node of the innermost detected component (for relative paths) */
+  innermostElement?: Node;
 }
 
 /**
@@ -722,26 +771,32 @@ export function getSolidComponentName(
     resolved.mode === "smart" ? getAncestorClasses(element) : undefined;
 
   let components: string[] = [];
+  let innermostElement: Node | undefined;
 
   // Strategy 1: walk the root owner tree (catches main-tree components)
   if (rootOwner) {
     try {
-      components = collectComponentsFromTree(
+      const treeResult = collectComponentsFromTree(
         rootOwner,
         element,
         resolved,
         domClasses,
       );
+      components = treeResult.components;
+      innermostElement = treeResult.innermostElement;
     } catch {
       // Tree walk may fail on complex/circular owner structures
     }
   }
 
   // Strategy 2: check tracked component owners from DEV hooks
-  // (catches components in separate render() roots like client-only islands)
-  if (components.length === 0 && trackedComponentOwners.size > 0) {
+  // Merges with Strategy 1 results to catch components that the tree walk
+  // missed (e.g. components created before rootOwner was captured, or
+  // components in separate render() roots like client-only islands).
+  if (trackedComponentOwners.size > 0) {
     try {
-      const matches: { name: string; depth: number }[] = [];
+      const existingNames = new Set(components);
+      const matches: { name: string; depth: number; owner: SolidOwner }[] = [];
       for (const owner of trackedComponentOwners) {
         if (ownerContainsElement(owner, element)) {
           const rawName = owner.name || owner.componentName;
@@ -749,6 +804,7 @@ export function getSolidComponentName(
             // Strip vite HMR wrapper prefix: "[solid-refresh]Foo" → "Foo"
             const name = rawName.replace(/^\[solid-refresh\]/, "");
             if (
+              !existingNames.has(name) &&
               !isMinifiedName(name) &&
               shouldIncludeComponent(name, 0, resolved, domClasses)
             ) {
@@ -758,15 +814,29 @@ export function getSolidComponentName(
                 depth++;
                 p = p.owner || p.parent;
               }
-              matches.push({ name, depth });
+              matches.push({ name, depth, owner });
             }
           }
         }
       }
-      matches.sort((a, b) => a.depth - b.depth);
-      components = matches
-        .slice(0, resolved.maxComponents)
-        .map((m) => m.name);
+      if (matches.length > 0) {
+        matches.sort((a, b) => a.depth - b.depth);
+        const tracked = matches.map((m) => m.name);
+        // Merge: use tracked owners as primary (more complete), deduplicated
+        const merged = [...tracked];
+        for (const name of components) {
+          if (!merged.includes(name)) merged.push(name);
+        }
+        components = merged.slice(0, resolved.maxComponents);
+        // Update innermost element from the deepest tracked match
+        const deepest = matches[matches.length - 1];
+        if (deepest) {
+          const dom = resolveOwnerDom(deepest.owner);
+          if (dom instanceof Node) {
+            innermostElement = dom;
+          }
+        }
+      }
     } catch {
       // Tracked owner query may fail
     }
@@ -791,6 +861,10 @@ export function getSolidComponentName(
           shouldIncludeComponent(name, depth, resolved, domClasses)
         ) {
           components.push(name);
+          const dom = resolveOwnerDom(owner);
+          if (dom instanceof Node) {
+            innermostElement = dom;
+          }
         }
 
         owner = getParentOwner(owner);
@@ -812,7 +886,7 @@ export function getSolidComponentName(
   // Build path: outermost → innermost: <App> <Layout> <Button>
   const path = components.map((c) => `<${c}>`).join(" ");
 
-  const result: SolidComponentInfo = { path, components };
+  const result: SolidComponentInfo = { path, components, innermostElement };
   if (useCache) {
     componentCacheAll.set(element, result);
   }

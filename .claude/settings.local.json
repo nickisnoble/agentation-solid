@@ -108,7 +108,10 @@
       "Bash(git rev-parse:*)",
       "Bash(git log:*)",
       "mcp__agentation__agentation_get_all_pending",
-      "Bash(npx tsup:*)"
+      "Bash(npx tsup:*)",
+      "Bash(jj diff:*)",
+      "Bash(jj log:*)",
+      "Bash(jj describe:*)"
     ]
   },
   "enableAllProjectMcpServers": false
