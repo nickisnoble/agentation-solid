@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, Show, For, JSX, batch } from "solid-js";
+import { createSignal, createEffect, createMemo, onMount, onCleanup, Show, For, JSX, batch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { captureElement } from "./section-detection";
 import { AnnotationPopupCSS } from "../annotation-popup-css";
@@ -491,9 +491,10 @@ export function RearrangeOverlay(props: RearrangeOverlayProps) {
     } else {
       newSelected = new Set(selectedIds());
     }
-    setSelectedIds(newSelected);
     // Only notify if selection actually changed (avoids deselecting other overlay when clicking an already-selected item to drag)
-    const changed = newSelected.size !== selectedIds().size || [...newSelected].some(x => !selectedIds().has(x));
+    const prevSelected = selectedIds();
+    setSelectedIds(newSelected);
+    const changed = newSelected.size !== prevSelected.size || [...newSelected].some(x => !prevSelected.has(x));
     if (changed) onSelectionChangeRef?.(newSelected, !!(e.shiftKey || e.metaKey || e.ctrlKey));
 
     const startX = e.clientX;
@@ -929,9 +930,12 @@ export function RearrangeOverlay(props: RearrangeOverlayProps) {
       <Show when={!props.blankCanvas}>
         {(() => {
           // Build list of sections that need connectors: committed changes + live drags
-          const connectorSections = (): { id: string; orig: { x: number; y: number; width: number; height: number }; target: { x: number; y: number; width: number; height: number }; isFixed?: boolean; isSelected: boolean; isExiting?: boolean }[] => {
-            const result: { id: string; orig: { x: number; y: number; width: number; height: number }; target: { x: number; y: number; width: number; height: number }; isFixed?: boolean; isSelected: boolean; isExiting?: boolean }[] = [];
-            for (const s of changedSections()) {
+          type ConnectorItem = { id: string; orig: { x: number; y: number; width: number; height: number }; target: { x: number; y: number; width: number; height: number }; isFixed?: boolean; isSelected: boolean; isExiting?: boolean };
+          // Memoize changedSections so visibleSections() DOM queries don't re-run on every dragPositions change
+          const changedSectionsStable = createMemo(() => changedSections());
+          const connectorSections = (): ConnectorItem[] => {
+            const result: ConnectorItem[] = [];
+            for (const s of changedSectionsStable()) {
               const livePos = dragPositions().get(s.id);
               result.push({ id: s.id, orig: s.originalRect, target: livePos || s.currentRect, isFixed: s.isFixed, isSelected: selectedIds().has(s.id), isExiting: exitingIds().has(s.id) });
             }
@@ -951,45 +955,61 @@ export function RearrangeOverlay(props: RearrangeOverlayProps) {
             return result;
           };
 
+          // Use store + reconcile so <For> keeps DOM stable (keyed by id)
+          const [connectorStore, setConnectorStore] = createStore<ConnectorItem[]>([]);
+          createEffect(() => {
+            // During active drag, skip reconcile — createMemo in each <For> item
+            // reads dragPositions directly for live position updates.
+            // Running the full reconcile (which triggers visibleSections DOM queries +
+            // store diffing) on every mousemove frame causes layout thrash that
+            // interferes with the outline's inline transform.
+            if (dragPositions().size > 0) return;
+            setConnectorStore(reconcile(connectorSections(), { key: "id" }));
+          });
+
           return (
-            <Show when={connectorSections().length > 0}>
+            <Show when={connectorStore.length > 0}>
               <svg class={`${styles.connectorSvg} ${exitingAll() || props.exiting ? styles.connectorExiting : ""}`}>
-                <For each={connectorSections()}>{({ id, orig, target, isFixed, isSelected, isExiting: isExitingConn }) => {
-                  const ox = orig.x + orig.width / 2;
-                  const oy = (isFixed ? orig.y : orig.y - scrollY()) + orig.height / 2;
-                  const cx = target.x + target.width / 2;
-                  const cy = (isFixed ? target.y : target.y - scrollY()) + target.height / 2;
-
-                  const ddx = cx - ox;
-                  const ddy = cy - oy;
-                  const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-                  if (dist < 2) return null;
-
-                  // Scale dots down as they approach each other
-                  const proximityScale = Math.min(1, dist / 40);
-                  const perpOffset = Math.min(dist * 0.3, 60);
-                  const nx = dist > 0 ? -ddy / dist : 0;
-                  const ny = dist > 0 ? ddx / dist : 0;
-                  const cpx = (ox + cx) / 2 + nx * perpOffset;
-                  const cpy = (oy + cy) / 2 + ny * perpOffset;
-                  const isDragging = dragPositions().has(id);
-                  const baseOpacity = isDragging || isSelected ? 1 : 0.4;
-                  const dotBaseOpacity = isDragging || isSelected ? 1 : 0.5;
+                <For each={connectorStore}>{(item) => {
+                  const c = createMemo(() => {
+                    // Read dragPositions directly for immediate updates (store reconcile is deferred)
+                    const liveTarget = dragPositions().get(item.id);
+                    const target = liveTarget || item.target;
+                    const ox = item.orig.x + item.orig.width / 2;
+                    const oy = (item.isFixed ? item.orig.y : item.orig.y - scrollY()) + item.orig.height / 2;
+                    const cx = target.x + target.width / 2;
+                    const cy = (item.isFixed ? target.y : target.y - scrollY()) + target.height / 2;
+                    const ddx = cx - ox;
+                    const ddy = cy - oy;
+                    const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+                    const proximityScale = Math.min(1, dist / 40);
+                    const perpOffset = Math.min(dist * 0.3, 60);
+                    const nx = dist > 0 ? -ddy / dist : 0;
+                    const ny = dist > 0 ? ddx / dist : 0;
+                    const cpx = (ox + cx) / 2 + nx * perpOffset;
+                    const cpy = (oy + cy) / 2 + ny * perpOffset;
+                    const isDragging = dragPositions().has(item.id);
+                    return { ox, oy, cx, cy, dist, proximityScale, cpx, cpy, isDragging };
+                  });
+                  const baseOpacity = () => { const { isDragging } = c(); return isDragging || item.isSelected ? 1 : 0.4; };
+                  const dotBaseOpacity = () => { const { isDragging } = c(); return isDragging || item.isSelected ? 1 : 0.5; };
 
                   return (
-                    <g class={isExitingConn ? styles.connectorExiting : ""}>
-                      <path
-                        class={styles.connectorLine}
-                        d={`M ${ox} ${oy} Q ${cpx} ${cpy} ${cx} ${cy}`}
-                        fill="none"
-                        stroke="rgba(59, 130, 246, 0.45)"
-                        stroke-width="1.5"
-                        opacity={baseOpacity * proximityScale}
-                      />
-                      {/* Endpoint circles */}
-                      <circle class={styles.connectorDot} cx={ox} cy={oy} r={4 * proximityScale} fill="rgba(59, 130, 246, 0.8)" stroke="#fff" stroke-width="1.5" opacity={dotBaseOpacity * proximityScale} filter="url(#connDotShadow)" />
-                      <circle class={styles.connectorDot} cx={cx} cy={cy} r={4 * proximityScale} fill="rgba(59, 130, 246, 0.8)" stroke="#fff" stroke-width="1.5" opacity={dotBaseOpacity * proximityScale} filter="url(#connDotShadow)" />
-                    </g>
+                    <Show when={c().dist >= 2}>
+                      <g class={item.isExiting ? styles.connectorExiting : ""}>
+                        <path
+                          class={styles.connectorLine}
+                          d={`M ${c().ox} ${c().oy} Q ${c().cpx} ${c().cpy} ${c().cx} ${c().cy}`}
+                          fill="none"
+                          stroke="rgba(59, 130, 246, 0.45)"
+                          stroke-width="1.5"
+                          opacity={baseOpacity() * c().proximityScale}
+                        />
+                        {/* Endpoint circles */}
+                        <circle class={styles.connectorDot} cx={c().ox} cy={c().oy} r={4 * c().proximityScale} fill="rgba(59, 130, 246, 0.8)" stroke="#fff" stroke-width="1.5" opacity={dotBaseOpacity() * c().proximityScale} filter="url(#connDotShadow)" />
+                        <circle class={styles.connectorDot} cx={c().cx} cy={c().cy} r={4 * c().proximityScale} fill="rgba(59, 130, 246, 0.8)" stroke="#fff" stroke-width="1.5" opacity={dotBaseOpacity() * c().proximityScale} filter="url(#connDotShadow)" />
+                      </g>
+                    </Show>
                   );
                 }}</For>
                 <defs>
